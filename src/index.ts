@@ -1,0 +1,256 @@
+/**
+ * Noveum Trace TypeScript SDK
+ * 
+ * A high-performance TypeScript SDK for tracing LLM, RAG, and agent applications
+ * with comprehensive observability features.
+ */
+
+// Core exports
+export { NoveumClient } from './core/client.js';
+export { Span } from './core/span.js';
+export { Trace } from './core/trace.js';
+
+// Type exports
+export type {
+  // Core interfaces
+  INoveumClient,
+  ISpan,
+  ITrace,
+  ITransport,
+  IContextManager,
+  ISampler,
+  IInstrumentation,
+  IConfigValidator,
+  IIdGenerator,
+} from './core/interfaces.js';
+
+export type {
+  // Configuration types
+  NoveumClientOptions,
+  TransportOptions,
+  TracingOptions,
+  IntegrationOptions,
+  ExpressIntegrationOptions,
+  NextjsIntegrationOptions,
+  HonoIntegrationOptions,
+  FastifyIntegrationOptions,
+  
+  // Core types
+  AttributeValue,
+  Attributes,
+  TraceEvent,
+  SpanContext,
+  SpanOptions,
+  SpanLink,
+  TraceOptions,
+  SerializedSpan,
+  SerializedTrace,
+  TraceBatch,
+  
+  // Error types
+  NoveumError,
+  ConfigurationError,
+  TransportError,
+  InstrumentationError,
+} from './core/types.js';
+
+// Enum exports
+export { SpanStatus, SpanKind, TraceLevel } from './core/types.js';
+
+// Sampling
+export {
+  Sampler,
+  AlwaysSampler,
+  NeverSampler,
+  RateSampler,
+} from './core/sampler.js';
+
+// Types
+export type {
+  SamplingConfig,
+  SamplingRule,
+} from './core/types.js';
+
+// Context management exports
+export {
+  ContextManager,
+  getGlobalContextManager,
+  setGlobalContextManager,
+  withCleanContext,
+  getCurrentSpan,
+  getCurrentTrace,
+  setCurrentSpan,
+  setCurrentTrace,
+} from './context/context-manager.js';
+
+// Transport exports
+export {
+  HttpTransport,
+  MockTransport,
+  ConsoleTransport,
+  createTransport,
+} from './transport/http-transport.js';
+
+export type {
+  HttpTransportConfig,
+} from './transport/http-transport.js';
+
+// Decorator exports
+export {
+  setGlobalClient,
+  trace,
+  span,
+  autoSpan,
+  timed,
+  retry,
+  traceClass,
+  traced,
+  withSpan,
+} from './decorators/index.js';
+
+// Utility exports
+export {
+  generateTraceId,
+  generateSpanId,
+  getCurrentTimestamp,
+  isValidAttributeValue,
+  sanitizeAttributes,
+  deepMerge,
+  isPlainObject,
+  truncateString,
+  safeStringify,
+  debounce,
+  throttle,
+  sleep,
+  retry as retryUtil,
+  getEnvVar,
+  isNode,
+  isBrowser,
+  getSdkVersion,
+  withTimeout,
+  normalizeUrl,
+  extractErrorInfo,
+} from './utils/index.js';
+
+/**
+ * Create and configure a new Noveum client
+ */
+export function createClient(options?: import('./core/types.js').NoveumClientOptions): import('./core/client.js').NoveumClient {
+  const { NoveumClient } = require('./core/client.js');
+  const client = new NoveumClient(options);
+  
+  // Set as global client for decorators
+  const { setGlobalClient } = require('./decorators/index.js');
+  setGlobalClient(client);
+  
+  return client;
+}
+
+/**
+ * Default client instance (lazy-initialized)
+ */
+let defaultClient: import('./core/client.js').NoveumClient | undefined;
+
+/**
+ * Get the default client instance
+ */
+export function getDefaultClient(): import('./core/client.js').NoveumClient {
+  if (!defaultClient) {
+    defaultClient = createClient();
+  }
+  return defaultClient;
+}
+
+/**
+ * Set a custom default client
+ */
+export function setDefaultClient(client: import('./core/client.js').NoveumClient): void {
+  defaultClient = client;
+  const { setGlobalClient } = require('./decorators/index.js');
+  setGlobalClient(client);
+}
+
+/**
+ * Convenience functions using the default client
+ */
+
+/**
+ * Start a new trace using the default client
+ */
+export async function startTrace(name: string, options?: import('./core/types.js').TraceOptions): Promise<import('./core/trace.js').Trace> {
+  return getDefaultClient().createTrace(name, options);
+}
+
+/**
+ * Start a new span using the default client
+ */
+export async function startSpan(name: string, options?: import('./core/types.js').SpanOptions): Promise<import('./core/span.js').Span> {
+  return getDefaultClient().startSpan(name, options);
+}
+
+/**
+ * Create and run a function within a new trace using the default client
+ */
+export async function traceFunction<T>(
+  name: string,
+  fn: () => Promise<T>,
+  options?: import('./core/types.js').TraceOptions
+): Promise<T> {
+  const trace = await getDefaultClient().createTrace(name, options);
+  try {
+    return await fn();
+  } finally {
+    await trace.finish();
+  }
+}
+
+/**
+ * Create and run a function within a new span using the default client
+ */
+export async function spanFunction<T>(
+  name: string,
+  fn: () => Promise<T>,
+  options?: import('./core/types.js').SpanOptions
+): Promise<T> {
+  const span = await getDefaultClient().startSpan(name, options);
+  try {
+    return await fn();
+  } finally {
+    await span.finish();
+  }
+}
+
+/**
+ * Flush all pending data using the default client
+ */
+export async function flush(): Promise<void> {
+  if (defaultClient) {
+    await defaultClient.flush();
+  }
+}
+
+/**
+ * Shutdown the default client
+ */
+export async function shutdown(): Promise<void> {
+  if (defaultClient) {
+    await defaultClient.shutdown();
+    defaultClient = undefined;
+  }
+}
+
+/**
+ * SDK version
+ */
+export const VERSION = '0.1.0';
+
+/**
+ * SDK metadata
+ */
+export const SDK_INFO = {
+  name: '@noveum/trace',
+  version: VERSION,
+  description: 'TypeScript SDK for tracing LLM, RAG, and agent applications',
+  homepage: 'https://github.com/Noveum/noveum-trace-typescript',
+} as const;
+
