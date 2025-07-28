@@ -3,7 +3,12 @@
  */
 
 import type { ITransport } from '../core/interfaces.js';
-import type { TraceBatch, TransportOptions } from '../core/types.js';
+import type {
+  TraceBatch,
+  TransportOptions,
+  SerializedSpan,
+  SerializedTrace,
+} from '../core/types.js';
 import { TransportError } from '../core/types.js';
 import { retry, withTimeout, getSdkVersion } from '../utils/index.js';
 
@@ -23,9 +28,9 @@ export class HttpTransport implements ITransport {
   private readonly _httpConfig: HttpTransportConfig;
   private readonly _pendingBatches: TraceBatch[] = [];
   private readonly _userAgent: string;
-  
+
   private _isShutdown = false;
-  private _flushPromise?: Promise<void>;
+  private _flushPromise: Promise<void> | undefined = undefined;
 
   constructor(config: TransportOptions, httpConfig: HttpTransportConfig) {
     this._config = {
@@ -35,7 +40,7 @@ export class HttpTransport implements ITransport {
       timeout: config.timeout ?? 30000,
       headers: config.headers ?? {},
     };
-    
+
     this._httpConfig = httpConfig;
     this._userAgent = `noveum-trace-typescript/${getSdkVersion()}`;
   }
@@ -92,17 +97,19 @@ export class HttpTransport implements ITransport {
     }
 
     this._flushPromise = this._doFlush();
-    
-    try {
-      await this._flushPromise;
-    } finally {
-      this._flushPromise = undefined;
+
+    if (this._flushPromise) {
+      try {
+        await this._flushPromise;
+      } finally {
+        this._flushPromise = undefined;
+      }
     }
   }
 
   private async _doFlush(): Promise<void> {
     const batchesToSend = this._pendingBatches.splice(0);
-    
+
     if (batchesToSend.length === 0) {
       return;
     }
@@ -115,7 +122,7 @@ export class HttpTransport implements ITransport {
     } catch (error) {
       // Log error but don't throw to avoid breaking the application
       console.error('Failed to send trace batch:', error);
-      
+
       // Optionally, you could implement a dead letter queue here
       // to store failed batches for later retry
     }
@@ -123,11 +130,20 @@ export class HttpTransport implements ITransport {
 
   private _combineBatches(batches: TraceBatch[]): TraceBatch {
     if (batches.length === 1) {
-      return batches[0];
+      const firstBatch = batches[0];
+      if (!firstBatch) {
+        throw new Error('No batches to combine');
+      }
+      return firstBatch;
     }
 
-    const allTraces = batches.flatMap(batch => batch.traces);
+    const allTraces = batches.flatMap(batch => batch.traces) as
+      | SerializedSpan[]
+      | SerializedTrace[];
     const firstBatch = batches[0];
+    if (!firstBatch) {
+      throw new Error('No batches to combine');
+    }
 
     return {
       traces: allTraces,
@@ -140,11 +156,11 @@ export class HttpTransport implements ITransport {
 
   private async _sendBatch(batch: TraceBatch): Promise<void> {
     const requestBody = JSON.stringify(batch);
-    
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'User-Agent': this._userAgent,
-      'Authorization': `Bearer ${this._httpConfig.apiKey}`,
+      Authorization: `Bearer ${this._httpConfig.apiKey}`,
       ...this._config.headers,
     };
 
@@ -222,7 +238,7 @@ export class HttpTransport implements ITransport {
         fetch(this._httpConfig.endpoint.replace('/traces', '/health'), {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${this._httpConfig.apiKey}`,
+            Authorization: `Bearer ${this._httpConfig.apiKey}`,
             'User-Agent': this._userAgent,
           },
         }),
@@ -295,12 +311,12 @@ export class ConsoleTransport implements ITransport {
     console.log('=== Noveum Trace Batch ===');
     console.log('Metadata:', batch.metadata);
     console.log('Traces:');
-    
+
     batch.traces.forEach((trace, index) => {
       console.log(`  Trace ${index + 1}:`, {
         id: trace.traceId,
         name: trace.name,
-        duration: trace.endTime 
+        duration: trace.endTime
           ? new Date(trace.endTime).getTime() - new Date(trace.startTime).getTime()
           : 'ongoing',
         spanCount: trace.spans.length,
@@ -312,14 +328,14 @@ export class ConsoleTransport implements ITransport {
           id: span.spanId,
           name: span.name,
           status: span.status,
-          duration: span.endTime 
+          duration: span.endTime
             ? new Date(span.endTime).getTime() - new Date(span.startTime).getTime()
             : 'ongoing',
           attributes: span.attributes,
         });
       });
     });
-    
+
     console.log('=========================');
   }
 
@@ -347,15 +363,14 @@ export function createTransport(
         throw new Error('HTTP config is required for HTTP transport');
       }
       return new HttpTransport(config || {}, httpConfig);
-    
+
     case 'mock':
       return new MockTransport();
-    
+
     case 'console':
       return new ConsoleTransport();
-    
+
     default:
       throw new Error(`Unknown transport type: ${type}`);
   }
 }
-

@@ -2,26 +2,10 @@
  * Span implementation for the Noveum Trace SDK
  */
 
-import type {
-  ISpan,
-  ITrace,
-} from './interfaces.js';
-import type {
-  Attributes,
-  SpanOptions,
-  TraceEvent,
-  SerializedSpan,
-  AttributeValue,
-  SpanLink,
-} from './types.js';
+import type { ISpan, ITrace } from './interfaces.js';
+import type { Attributes, SpanOptions, TraceEvent, SerializedSpan, SpanLink } from './types.js';
 import { SpanKind, SpanStatus } from './types.js';
-import type { NoveumClient } from './client.js';
-import {
-  generateSpanId,
-  getCurrentTimestamp,
-  sanitizeAttributes,
-  extractErrorInfo,
-} from '../utils/index.js';
+import { generateSpanId, sanitizeAttributes, extractErrorInfo } from '../utils/index.js';
 
 /**
  * Implementation of a span - represents a single operation within a trace
@@ -29,7 +13,7 @@ import {
 export class Span implements ISpan {
   private readonly _spanId: string;
   private readonly _traceId: string;
-  private readonly _parentSpanId?: string;
+  private readonly _parentSpanId: string | undefined;
   private readonly _name: string;
   private readonly _kind: SpanKind;
   private readonly _startTime: Date;
@@ -38,16 +22,12 @@ export class Span implements ISpan {
 
   private _endTime?: Date;
   private _status: SpanStatus = SpanStatus.UNSET;
-  private _statusMessage?: string;
+  private _statusMessage: string | undefined;
   private _attributes: Attributes = {};
   private _events: TraceEvent[] = [];
   private _isFinished = false;
 
-  constructor(
-    trace: ITrace,
-    name: string,
-    options: SpanOptions = {}
-  ) {
+  constructor(trace: ITrace, name: string, options: SpanOptions = {}) {
     this._trace = trace;
     this._spanId = generateSpanId();
     this._traceId = trace.traceId;
@@ -140,7 +120,7 @@ export class Span implements ISpan {
 
     const event: TraceEvent = {
       name,
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
       attributes: attributes ? sanitizeAttributes(attributes) : undefined,
     };
 
@@ -163,9 +143,10 @@ export class Span implements ISpan {
       return;
     }
 
-    const errorInfo = typeof exception === 'string' 
-      ? { message: exception, name: 'Exception' }
-      : extractErrorInfo(exception);
+    const errorInfo =
+      typeof exception === 'string'
+        ? { message: exception, name: 'Exception' }
+        : extractErrorInfo(exception);
 
     this.addEvent('exception', {
       'exception.type': errorInfo.name,
@@ -229,7 +210,10 @@ export class Span implements ISpan {
   /**
    * Create a child span
    */
-  async startChildSpan(name: string, options: Omit<SpanOptions, 'parentSpanId'> = {}): Promise<ISpan> {
+  async startChildSpan(
+    name: string,
+    options: Omit<SpanOptions, 'parentSpanId'> = {}
+  ): Promise<ISpan> {
     return this._trace.startSpan(name, {
       ...options,
       parentSpanId: this._spanId,
@@ -242,12 +226,12 @@ export class Span implements ISpan {
   async withSpan<T>(fn: () => Promise<T>): Promise<T> {
     try {
       const result = await fn();
-      
+
       // If the function completed successfully and status is still UNSET, set to OK
       if (this._status === SpanStatus.UNSET) {
         this.setStatus(SpanStatus.OK);
       }
-      
+
       return result;
     } catch (error) {
       // Record the exception and set error status
@@ -262,12 +246,12 @@ export class Span implements ISpan {
   withSpanSync<T>(fn: () => T): T {
     try {
       const result = fn();
-      
+
       // If the function completed successfully and status is still UNSET, set to OK
       if (this._status === SpanStatus.UNSET) {
         this.setStatus(SpanStatus.OK);
       }
-      
+
       return result;
     } catch (error) {
       // Record the exception and set error status
@@ -305,8 +289,7 @@ export class Span implements ISpan {
   toString(): string {
     const duration = this.getDuration();
     const durationStr = duration !== undefined ? `${duration}ms` : 'ongoing';
-    
+
     return `Span(${this._name}, ${this._spanId}, ${this._status}, ${durationStr})`;
   }
 }
-

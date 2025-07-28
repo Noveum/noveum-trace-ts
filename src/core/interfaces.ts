@@ -29,7 +29,7 @@ export interface ISpan {
   /**
    * Parent span ID if this is a child span
    */
-  readonly parentSpanId?: string;
+  readonly parentSpanId: string | undefined;
 
   /**
    * Name of the operation this span represents
@@ -44,7 +44,7 @@ export interface ISpan {
   /**
    * End time of the span (undefined if not finished)
    */
-  readonly endTime?: Date;
+  readonly endTime: Date | undefined;
 
   /**
    * Whether the span has been finished
@@ -112,7 +112,7 @@ export interface ITrace {
   /**
    * End time of the trace (set when finished)
    */
-  endTime?: Date;
+  endTime: Date | undefined;
 
   /**
    * Whether the trace has been finished
@@ -150,6 +150,17 @@ export interface ITrace {
    * @param attributes - Optional event attributes
    */
   addEvent(name: string, attributes?: Attributes): void;
+
+  /**
+   * Set the trace status
+   * @param status - Status string (e.g., 'OK', 'ERROR')
+   */
+  setStatus(status: string): void;
+
+  /**
+   * Get the trace status
+   */
+  getStatus(): string;
 
   /**
    * Finish the trace
@@ -346,4 +357,3 @@ export interface IIdGenerator {
    */
   generateSpanId(): string;
 }
-

@@ -10,8 +10,8 @@ import type { IContextManager, ITrace, ISpan } from '../core/interfaces.js';
  * Context data structure
  */
 interface TraceContext {
-  activeTrace?: ITrace;
-  activeSpan?: ISpan;
+  activeTrace: ITrace | undefined;
+  activeSpan: ISpan | undefined;
   spanStack: ISpan[];
 }
 
@@ -20,7 +20,11 @@ interface TraceContext {
  */
 export class ContextManager implements IContextManager {
   private readonly _asyncLocalStorage: AsyncLocalStorage<TraceContext>;
-  private _fallbackContext: TraceContext = { spanStack: [] };
+  private _fallbackContext: TraceContext = {
+    activeTrace: undefined,
+    activeSpan: undefined,
+    spanStack: [],
+  };
 
   constructor() {
     this._asyncLocalStorage = new AsyncLocalStorage<TraceContext>();
@@ -34,7 +38,7 @@ export class ContextManager implements IContextManager {
   setActiveSpan(span: ISpan): void {
     const context = this._getContext();
     context.activeSpan = span;
-    
+
     // Also set the trace if not already set
     if (!context.activeTrace && span.traceId) {
       // We can't directly get the trace from span, so we'll need to handle this differently
@@ -163,10 +167,10 @@ export class ContextManager implements IContextManager {
   popSpan(): ISpan | undefined {
     const context = this._getContext();
     const poppedSpan = context.spanStack.pop();
-    
+
     // Update active span to the new top of stack
-    context.activeSpan = context.spanStack[context.spanStack.length - 1];
-    
+    context.activeSpan = context.spanStack[context.spanStack.length - 1] ?? undefined;
+
     return poppedSpan;
   }
 
@@ -214,7 +218,7 @@ export class ContextManager implements IContextManager {
     isUsingAsyncLocalStorage: boolean;
   } {
     const context = this._getContext();
-    
+
     return {
       hasActiveTrace: !!context.activeTrace,
       hasActiveSpan: !!context.activeSpan,
@@ -255,8 +259,12 @@ export function setGlobalContextManager(contextManager: ContextManager): void {
  */
 export async function withCleanContext<T>(fn: () => Promise<T>): Promise<T> {
   const contextManager = getGlobalContextManager();
-  const emptyContext: TraceContext = { spanStack: [] };
-  
+  const emptyContext: TraceContext = {
+    activeTrace: undefined,
+    activeSpan: undefined,
+    spanStack: [],
+  };
+
   return contextManager['_asyncLocalStorage'].run(emptyContext, fn);
 }
 
@@ -287,4 +295,3 @@ export function setCurrentSpan(span: ISpan): void {
 export function setCurrentTrace(trace: ITrace): void {
   getGlobalContextManager().setActiveTrace(trace);
 }
-

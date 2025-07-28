@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
@@ -6,12 +6,50 @@ on:
   pull_request:
     branches: [main, develop]
 
+env:
+  NODE_VERSION: '20'
+  CACHE_VERSION: v1
+
 jobs:
+  # Job 1: Code Quality & Linting
+  quality:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Check code formatting
+        run: npm run format:check
+
+      - name: TypeScript type checking
+        run: npm run typecheck
+
+      - name: Check for unused dependencies
+        run: npx depcheck --ignores="@types/*,tsx,vitest,@vitest/*,eslint*,prettier,rimraf,typedoc,@changesets/*,tsup"
+
+  # Job 2: Unit Tests
   test:
+    name: Unit Tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        node-version: [18, 20, 22]
 
     steps:
       - name: Checkout code
@@ -26,29 +64,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run type checking
-        run: npm run typecheck
+      - name: Run unit tests
+        run: npm test -- --coverage
 
-      - name: Run linting
-        run: npm run lint
-
-      - name: Run formatting check
-        run: npm run format:check
-
-      - name: Run tests
-        run: npm run test:coverage
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+      - name: Upload coverage reports to Codecov
+        if: matrix.node-version == 20
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./coverage/coverage-final.json
+          slug: Noveum/noveum-trace-ts
+          files: ./coverage/lcov.info
           flags: unittests
           name: codecov-umbrella
 
+  # Job 3: Build & Package
   build:
+    name: Build & Package
     runs-on: ubuntu-latest
-    needs: test
+    needs: [quality, test]
 
     steps:
       - name: Checkout code
@@ -57,18 +90,322 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build package
+      - name: Build project
         run: npm run build
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: dist
-          path: dist/
+      - name: Check build outputs
+        run: |
+          echo "Checking build outputs..."
+          ls -la dist/
+          echo "Checking ESM build..."
+          test -f dist/index.mjs || exit 1
+          echo "Checking CJS build..."
+          test -f dist/index.js || exit 1
+          echo "Checking TypeScript declarations..."
+          test -f dist/index.d.ts || exit 1
+          echo "Build outputs verified ✅"
 
+      - name: Test package installation
+        run: |
+          echo "Testing package installation..."
+          npm pack
+          PACKAGE_NAME=$(ls *.tgz)
+          echo "Created package: $PACKAGE_NAME"
+          mkdir test-install && cd test-install
+          npm init -y
+          npm install ../$PACKAGE_NAME
+          echo "Package installation test passed ✅"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ github.sha }}
+          path: |
+            dist/
+            *.tgz
+          retention-days: 7
+
+  # Job 4: Integration Tests (if API key is available)
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.repository_owner == 'Noveum' # Only run on main repo
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-${{ github.sha }}
+
+      - name: Run smoke tests
+        run: npm run test:smoke
+
+      - name: Run integration tests
+        env:
+          NOVEUM_API_KEY: ${{ secrets.NOVEUM_API_KEY }}
+          NOVEUM_PROJECT: 'ci-test'
+          NOVEUM_ENVIRONMENT: 'github-actions'
+        run: |
+          if [ -n "$NOVEUM_API_KEY" ]; then
+            npm run test:integration
+          else
+            echo "NOVEUM_API_KEY not set, skipping integration tests"
+          fi
+
+  # Job 5: Security & Dependency Audit
+  security:
+    name: Security & Dependency Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+      - name: Check for known vulnerabilities
+        run: |
+          echo "Checking for known vulnerabilities..."
+          npx audit-ci --moderate
+          echo "Security audit completed ✅"
+
+  # Job 6: Bundle Analysis
+  bundle-analysis:
+    name: Bundle Size Analysis
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-${{ github.sha }}
+
+      - name: Analyze bundle size
+        run: |
+          echo "📦 Bundle Size Analysis"
+          echo "======================="
+          echo "ESM Bundle:"
+          ls -lh dist/*.mjs | awk '{print $5 "\t" $9}'
+          echo ""
+          echo "CJS Bundle:"
+          ls -lh dist/*.js | awk '{print $5 "\t" $9}'
+          echo ""
+          echo "TypeScript Declarations:"
+          ls -lh dist/*.d.ts | awk '{print $5 "\t" $9}'
+          echo ""
+          echo "Total package size:"
+          du -sh dist/
+
+      - name: Bundle size check
+        run: |
+          # Check that main bundle is not too large (< 500KB)
+          MAIN_SIZE=$(stat -c%s dist/index.mjs)
+          echo "Main bundle size: $MAIN_SIZE bytes"
+          if [ $MAIN_SIZE -gt 512000 ]; then
+            echo "❌ Main bundle is too large (>500KB)"
+            exit 1
+          else
+            echo "✅ Bundle size is acceptable"
+          fi
+
+  # Job 7: Performance Tests
+  performance:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-${{ github.sha }}
+
+      - name: Run performance benchmarks
+        run: |
+          echo "🚀 Performance Benchmarks"
+          echo "========================="
+
+          # Create a simple performance test
+          cat > perf-test.js << 'EOF'
+          const { NoveumClient } = require('./dist/index.js');
+
+          async function perfTest() {
+            const client = new NoveumClient({
+              apiKey: 'test-key',
+              project: 'perf-test',
+              enabled: false
+            });
+
+            console.time('Create 1000 traces');
+            const promises = [];
+            for (let i = 0; i < 1000; i++) {
+              promises.push(client.createTrace(`trace-${i}`, {
+                attributes: { index: i, type: 'performance-test' }
+              }));
+            }
+            await Promise.all(promises);
+            console.timeEnd('Create 1000 traces');
+            
+            await client.shutdown();
+            console.log('✅ Performance test completed');
+          }
+
+          perfTest().catch(console.error);
+          EOF
+
+          node perf-test.js
+
+  # Job 8: Documentation Check
+  docs:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate documentation
+        run: npm run docs
+
+      - name: Check documentation coverage
+        run: |
+          echo "📚 Documentation Coverage Check"
+          echo "==============================="
+
+          # Check for missing README sections
+          if ! grep -q "## Installation" README.md; then
+            echo "❌ Missing Installation section in README"
+            exit 1
+          fi
+
+          if ! grep -q "## Usage" README.md; then
+            echo "❌ Missing Usage section in README"
+            exit 1
+          fi
+
+          # Check for JSDoc coverage (basic check)
+          EXPORTED_FUNCTIONS=$(grep -c "^export " src/index.ts || echo 0)
+          DOCUMENTED_FUNCTIONS=$(grep -c "@param\|@returns\|@example" src/**/*.ts || echo 0)
+
+          echo "Exported functions: $EXPORTED_FUNCTIONS"
+          echo "Functions with JSDoc: $DOCUMENTED_FUNCTIONS"
+
+          if [ $DOCUMENTED_FUNCTIONS -lt $((EXPORTED_FUNCTIONS / 2)) ]; then
+            echo "⚠️ Low documentation coverage"
+          else
+            echo "✅ Documentation coverage looks good"
+          fi
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-${{ github.sha }}
+          path: docs/
+          retention-days: 7
+
+  # Final job: Status check
+  ci-success:
+    name: CI Pipeline Success
+    runs-on: ubuntu-latest
+    needs: [quality, test, build, security, bundle-analysis, performance, docs]
+    if: always()
+
+    steps:
+      - name: Check all jobs status
+        run: |
+          echo "🎯 CI Pipeline Results"
+          echo "====================="
+          echo "Quality: ${{ needs.quality.result }}"
+          echo "Tests: ${{ needs.test.result }}"
+          echo "Build: ${{ needs.build.result }}"
+          echo "Security: ${{ needs.security.result }}"
+          echo "Bundle Analysis: ${{ needs.bundle-analysis.result }}"
+          echo "Performance: ${{ needs.performance.result }}"
+          echo "Documentation: ${{ needs.docs.result }}"
+
+          if [[ "${{ needs.quality.result }}" == "success" && 
+                "${{ needs.test.result }}" == "success" && 
+                "${{ needs.build.result }}" == "success" && 
+                "${{ needs.security.result }}" == "success" && 
+                "${{ needs.bundle-analysis.result }}" == "success" && 
+                "${{ needs.performance.result }}" == "success" && 
+                "${{ needs.docs.result }}" == "success" ]]; then
+            echo ""
+            echo "🎉 All checks passed! CI pipeline successful."
+            echo "✅ Ready for merge/deployment"
+          else
+            echo ""
+            echo "❌ Some checks failed. Please review the results above."
+            exit 1
+          fi

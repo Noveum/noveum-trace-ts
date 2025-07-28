@@ -2,24 +2,16 @@
  * Trace implementation for the Noveum Trace SDK
  */
 
-import type {
-  ITrace,
-  ISpan,
-  ITransport,
-} from './interfaces.js';
+import type { ITrace, ISpan, ITransport } from './interfaces.js';
 import type {
   Attributes,
   SpanOptions,
   TraceEvent,
-  TraceLevel,
   TraceOptions,
   SerializedTrace,
 } from './types.js';
-import {
-  generateTraceId,
-  sanitizeAttributes,
-  getCurrentTimestamp,
-} from '../utils/index.js';
+import { TraceLevel } from './types.js';
+import { generateTraceId, sanitizeAttributes, getCurrentTimestamp } from '../utils/index.js';
 import { Span } from './span.js';
 
 /**
@@ -30,7 +22,7 @@ export class Trace implements ITrace {
   private readonly _name: string;
   private readonly _level: TraceLevel;
   private readonly _startTime: Date;
-  private readonly _transport?: ITransport;
+  private readonly _transport: ITransport | undefined;
 
   private _endTime?: Date;
   private _attributes: Attributes = {};
@@ -38,12 +30,9 @@ export class Trace implements ITrace {
   private _spans: ISpan[] = [];
   private _isFinished = false;
   private _activeSpan?: ISpan;
+  private _status = 'OK';
 
-  constructor(
-    name: string,
-    options: TraceOptions = {},
-    transport?: ITransport
-  ) {
+  constructor(name: string, options: TraceOptions = {}, transport?: ITransport) {
     this._traceId = generateTraceId();
     this._name = name;
     this._level = options.level ?? TraceLevel.INFO;
@@ -79,7 +68,7 @@ export class Trace implements ITrace {
     return this._isFinished;
   }
 
-  get spans(): readonly ISpan[] {
+  get spans(): ISpan[] {
     return [...this._spans];
   }
 
@@ -93,6 +82,20 @@ export class Trace implements ITrace {
 
   get activeSpan(): ISpan | undefined {
     return this._activeSpan;
+  }
+
+  /**
+   * Set the trace status
+   */
+  setStatus(status: string): void {
+    this._status = status;
+  }
+
+  /**
+   * Get the trace status
+   */
+  getStatus(): string {
+    return this._status;
   }
 
   async startSpan(name: string, options: SpanOptions = {}): Promise<ISpan> {
@@ -161,11 +164,9 @@ export class Trace implements ITrace {
     const unfinishedSpans = this._spans.filter(span => !span.isFinished);
     if (unfinishedSpans.length > 0) {
       console.warn(`Finishing trace with ${unfinishedSpans.length} unfinished spans`);
-      
+
       // Finish all unfinished spans
-      await Promise.all(
-        unfinishedSpans.map(span => span.finish(this._endTime))
-      );
+      await Promise.all(unfinishedSpans.map(span => span.finish(this._endTime)));
     }
 
     this._isFinished = true;
@@ -288,10 +289,14 @@ export class Trace implements ITrace {
    * Create a child trace (for distributed tracing scenarios)
    */
   createChildTrace(name: string, options: Omit<TraceOptions, 'parentTraceId'> = {}): Trace {
-    return new Trace(name, {
-      ...options,
-      parentTraceId: this._traceId,
-    }, this._transport);
+    return new Trace(
+      name,
+      {
+        ...options,
+        parentTraceId: this._traceId,
+      },
+      this._transport
+    );
   }
 
   private async _sendToTransport(): Promise<void> {
@@ -319,7 +324,7 @@ export class Trace implements ITrace {
     const duration = this.getDuration();
     const durationStr = duration !== undefined ? `${duration}ms` : 'ongoing';
     const stats = this.getStats();
-    
+
     return `Trace(${this._name}, ${this._traceId}, ${stats.spanCount} spans, ${durationStr})`;
   }
 
@@ -341,4 +346,3 @@ export class Trace implements ITrace {
     };
   }
 }
-

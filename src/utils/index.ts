@@ -27,6 +27,30 @@ export function getCurrentTimestamp(): string {
 }
 
 /**
+ * Format timestamp to match Python SDK format
+ * Python uses: "2025-07-28T11:39:59.305103" (microsecond precision, no Z suffix)
+ * JavaScript native: "2025-07-28T15:40:05.753Z" (millisecond precision, with Z suffix)
+ */
+export function formatPythonCompatibleTimestamp(date: Date = new Date()): string {
+  const isoString = date.toISOString();
+
+  // Remove the 'Z' suffix and add microsecond precision
+  const withoutZ = isoString.slice(0, -1); // Remove 'Z'
+
+  // Convert milliseconds to microseconds by adding three zeros
+  // e.g., "2025-07-28T15:40:05.753" -> "2025-07-28T15:40:05.753000"
+  const parts = withoutZ.split('.');
+  if (parts.length === 2) {
+    const [datePart, milliseconds] = parts;
+    const microseconds = milliseconds.padEnd(6, '0');
+    return `${datePart}.${microseconds}`;
+  }
+
+  // Fallback: add .000000 if no decimal part
+  return `${withoutZ}.000000`;
+}
+
+/**
  * Validate attribute value
  */
 export function isValidAttributeValue(value: unknown): value is AttributeValue {
@@ -82,7 +106,10 @@ export function deepMerge<T extends Record<string, unknown>>(target: T, source: 
       typeof targetValue === 'object' &&
       !Array.isArray(targetValue)
     ) {
-      result[key] = deepMerge(targetValue as Record<string, unknown>, sourceValue as Record<string, unknown>) as T[Extract<keyof T, string>];
+      result[key] = deepMerge(
+        targetValue as Record<string, unknown>,
+        sourceValue as Record<string, unknown>
+      ) as T[Extract<keyof T, string>];
     } else if (sourceValue !== undefined) {
       result[key] = sourceValue as T[Extract<keyof T, string>];
     }
@@ -111,7 +138,7 @@ export function truncateString(str: string, maxLength: number): string {
   if (str.length <= maxLength) {
     return str;
   }
-  return str.substring(0, maxLength - 3) + '...';
+  return `${str.substring(0, maxLength - 3)}...`;
 }
 
 /**
@@ -220,12 +247,7 @@ export async function retry<T>(
     backoffFactor?: number;
   } = {}
 ): Promise<T> {
-  const {
-    maxRetries = 3,
-    baseDelay = 1000,
-    maxDelay = 30000,
-    backoffFactor = 2,
-  } = options;
+  const { maxRetries = 3, baseDelay = 1000, maxDelay = 30000, backoffFactor = 2 } = options;
 
   let lastError: Error;
 
@@ -321,4 +343,3 @@ export function extractErrorInfo(error: unknown): {
     name: 'Unknown',
   };
 }
-

@@ -2,18 +2,12 @@
  * Core client implementation for Noveum Trace SDK
  */
 
-import type { 
-  NoveumClientOptions, 
-  TraceOptions, 
-  SpanOptions,
-  TraceBatch,
-  SamplingConfig,
-} from './types.js';
-import { Trace } from './trace.js';
-import { Span } from './span.js';
+import type { NoveumClientOptions, TraceOptions, SpanOptions, TraceBatch } from './types.js';
+import { StandaloneTrace as Trace } from './trace-standalone.js';
+import { StandaloneSpan as Span } from './span-standalone.js';
 import { HttpTransport } from '../transport/http-transport.js';
-import { ContextManager } from '../context/context-manager.js';
-import { RateSampler } from './sampler.js';
+import { getGlobalContextManager } from '../context/context-manager.js';
+import { Sampler } from './sampler.js';
 
 /**
  * Default client configuration
@@ -41,10 +35,10 @@ const DEFAULT_OPTIONS: Required<Omit<NoveumClientOptions, 'apiKey'>> = {
 export class NoveumClient {
   private readonly _config: Required<NoveumClientOptions>;
   private readonly _transport: HttpTransport;
-  private readonly _contextManager: ContextManager;
-  private readonly _sampler: RateSampler;
+  // private readonly _contextManager: ContextManager;
+  private readonly _sampler: Sampler;
   private readonly _pendingSpans: Span[] = [];
-  private _flushTimer?: NodeJS.Timeout;
+  private _flushTimer: NodeJS.Timeout | undefined;
   private _isShutdown = false;
 
   constructor(options: Partial<NoveumClientOptions> & { apiKey: string }) {
@@ -58,16 +52,19 @@ export class NoveumClient {
       apiKey: options.apiKey,
     };
 
-    this._transport = new HttpTransport({
-      endpoint: this._config.endpoint,
-      apiKey: this._config.apiKey,
-      timeout: this._config.timeout,
-      retryAttempts: this._config.retryAttempts,
-      retryDelay: this._config.retryDelay,
-    });
+    this._transport = new HttpTransport(
+      {
+        timeout: this._config.timeout,
+        maxRetries: this._config.retryAttempts,
+      },
+      {
+        endpoint: this._config.endpoint,
+        apiKey: this._config.apiKey,
+      }
+    );
 
-    this._contextManager = new ContextManager();
-    this._sampler = new RateSampler(this._config.sampling);
+    // this._contextManager = new ContextManager();
+    this._sampler = new Sampler(this._config.sampling);
 
     if (this._config.enabled) {
       this._startFlushTimer();
@@ -82,6 +79,13 @@ export class NoveumClient {
   }
 
   /**
+   * Alias for createTrace for backward compatibility
+   */
+  async startTrace(name: string, options: TraceOptions = {}): Promise<Trace> {
+    return this.createTrace(name, options);
+  }
+
+  /**
    * Create a new trace
    */
   async createTrace(name: string, options: TraceOptions = {}): Promise<Trace> {
@@ -90,9 +94,9 @@ export class NoveumClient {
     }
 
     const traceId = options.traceId || this._generateId();
-    
+
     // Check sampling
-    if (!this._sampler.shouldSample(name, traceId)) {
+    if (!this._sampler.shouldSample(traceId, name)) {
       return this._createNoOpTrace(name);
     }
 
@@ -100,6 +104,9 @@ export class NoveumClient {
       ...options,
       client: this,
     });
+
+    // Set as active trace in context
+    getGlobalContextManager().setActiveTrace(trace);
 
     if (this._config.debug) {
       console.log(`[Noveum] Created trace: ${name} (${traceId})`);
@@ -118,9 +125,9 @@ export class NoveumClient {
 
     const spanId = this._generateId();
     const traceId = options.traceId || this._generateId();
-    
+
     // Check sampling
-    if (!this._sampler.shouldSample(name, traceId)) {
+    if (!this._sampler.shouldSample(traceId, name)) {
       return this._createNoOpSpan(name, traceId);
     }
 
@@ -129,6 +136,9 @@ export class NoveumClient {
       traceId,
       client: this,
     });
+
+    // Set as active span in context
+    getGlobalContextManager().setActiveSpan(span);
 
     if (this._config.debug) {
       console.log(`[Noveum] Started span: ${name} (${spanId})`);
@@ -165,6 +175,66 @@ export class NoveumClient {
     }
 
     await this._flushPendingSpans();
+  }
+
+  /**
+   * Get the active span
+   */
+  getActiveSpan(): Span | undefined {
+    return getGlobalContextManager().getActiveSpan() as Span | undefined;
+  }
+
+  /**
+   * Get the active trace
+   */
+  getActiveTrace(): Trace | undefined {
+    return getGlobalContextManager().getActiveTrace() as Trace | undefined;
+  }
+
+  /**
+   * Run a function with a span in context
+   */
+  async withSpan<T>(span: Span, fn: () => T | Promise<T>): Promise<T> {
+    return getGlobalContextManager().withSpanAsync(span, async () => {
+      const result = fn();
+      return result instanceof Promise ? await result : result;
+    });
+  }
+
+  /**
+   * Run a function with a trace in context
+   */
+  async withTrace<T>(trace: Trace, fn: () => T | Promise<T>): Promise<T> {
+    return getGlobalContextManager().withTraceAsync(trace, async () => {
+      const result = fn();
+      return result instanceof Promise ? await result : result;
+    });
+  }
+
+  /**
+   * Trace a function (create trace, run function, finish trace)
+   */
+  async trace<T>(name: string, fn: () => T | Promise<T>, options?: TraceOptions): Promise<T> {
+    const trace = await this.createTrace(name, options);
+    try {
+      const result = await fn();
+      return result;
+    } finally {
+      await trace.finish();
+    }
+  }
+
+  /**
+   * Span a function (create span, run function, finish span)
+   */
+  async span<T>(name: string, fn: () => T | Promise<T>, options?: SpanOptions): Promise<T> {
+    const span = await this.startSpan(name, options);
+    try {
+      const result = await fn();
+      return result;
+    } finally {
+      await span.finish();
+    }
   }
 
   /**
@@ -239,13 +309,19 @@ export class NoveumClient {
     }
 
     const spansToFlush = this._pendingSpans.splice(0);
-    
+
     if (this._config.debug) {
       console.log(`[Noveum] Flushing ${spansToFlush.length} spans`);
     }
 
     const batch: TraceBatch = {
       traces: spansToFlush.map(span => span.serialize()),
+      metadata: {
+        project: this._config.project,
+        environment: this._config.environment,
+        timestamp: new Date().toISOString(),
+        sdkVersion: '0.1.0',
+      },
     };
 
     try {
@@ -295,7 +371,9 @@ let globalClient: NoveumClient | undefined;
 /**
  * Initialize the global client
  */
-export function initializeClient(options: Partial<NoveumClientOptions> & { apiKey: string }): NoveumClient {
+export function initializeClient(
+  options: Partial<NoveumClientOptions> & { apiKey: string }
+): NoveumClient {
   globalClient = new NoveumClient(options);
   return globalClient;
 }
@@ -310,3 +388,9 @@ export function getGlobalClient(): NoveumClient {
   return globalClient;
 }
 
+/**
+ * Reset the global client instance (for testing)
+ */
+export function resetGlobalClient(): void {
+  globalClient = undefined;
+}

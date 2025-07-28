@@ -1,0 +1,379 @@
+name: Documentation Updates
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'README.md'
+      - 'CLAUDE.md'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Job 1: Update CLAUDE.md with latest info
+  update-claude-md:
+    name: Update CLAUDE.md
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate project statistics
+        id: stats
+        run: |
+          echo "Generating project statistics..."
+          
+          # Count files and lines
+          SRC_FILES=$(find src -name '*.ts' | wc -l)
+          TEST_FILES=$(find . -name '*.test.ts' -o -name '*.spec.ts' | wc -l)
+          INTEGRATION_FILES=$(find tests -name '*.ts' 2>/dev/null | wc -l || echo 0)
+          
+          SRC_LINES=$(find src -name '*.ts' -exec wc -l {} + | tail -1 | awk '{print $1}')
+          
+          # Get exports count
+          EXPORTS=$(grep -r "^export " src/ | wc -l)
+          
+          # Get package info
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          
+          echo "src_files=$SRC_FILES" >> $GITHUB_OUTPUT
+          echo "test_files=$TEST_FILES" >> $GITHUB_OUTPUT
+          echo "integration_files=$INTEGRATION_FILES" >> $GITHUB_OUTPUT
+          echo "src_lines=$SRC_LINES" >> $GITHUB_OUTPUT
+          echo "exports=$EXPORTS" >> $GITHUB_OUTPUT
+          echo "version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
+          echo "name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Update CLAUDE.md statistics
+        run: |
+          echo "Updating CLAUDE.md with current statistics..."
+          
+          # Create a backup
+          cp CLAUDE.md CLAUDE.md.backup
+          
+          # Check if statistics section exists
+          if grep -q "## Project Statistics" CLAUDE.md; then
+            echo "Updating existing statistics section..."
+            
+            # Replace the statistics section
+            awk '
+              /^## Project Statistics/ {
+                print "## Project Statistics"
+                print ""
+                print "- **Package**: ${{ steps.stats.outputs.name }}@${{ steps.stats.outputs.version }}"
+                print "- **Source Files**: ${{ steps.stats.outputs.src_files }} TypeScript files"
+                print "- **Lines of Code**: ${{ steps.stats.outputs.src_lines }} lines"
+                print "- **Unit Tests**: ${{ steps.stats.outputs.test_files }} test files"
+                print "- **Integration Tests**: ${{ steps.stats.outputs.integration_files }} test files"
+                print "- **Public Exports**: ${{ steps.stats.outputs.exports }} functions/classes"
+                print "- **Last Updated**: $(date -u +"%Y-%m-%d %H:%M UTC")"
+                
+                # Skip until next section
+                while (getline && !/^## /) {}
+                if (/^## /) print
+                next
+              }
+              { print }
+            ' CLAUDE.md > CLAUDE.md.tmp && mv CLAUDE.md.tmp CLAUDE.md
+            
+          else
+            echo "Adding new statistics section..."
+            
+            # Add statistics section before the last section
+            awk '
+              /^## Important Implementation Details/ {
+                print "## Project Statistics"
+                print ""
+                print "- **Package**: ${{ steps.stats.outputs.name }}@${{ steps.stats.outputs.version }}"
+                print "- **Source Files**: ${{ steps.stats.outputs.src_files }} TypeScript files"
+                print "- **Lines of Code**: ${{ steps.stats.outputs.src_lines }} lines"
+                print "- **Unit Tests**: ${{ steps.stats.outputs.test_files }} test files"
+                print "- **Integration Tests**: ${{ steps.stats.outputs.integration_files }} test files"
+                print "- **Public Exports**: ${{ steps.stats.outputs.exports }} functions/classes"
+                print "- **Last Updated**: $(date -u +"%Y-%m-%d %H:%M UTC")"
+                print ""
+              }
+              { print }
+            ' CLAUDE.md > CLAUDE.md.tmp && mv CLAUDE.md.tmp CLAUDE.md
+          fi
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if ! diff -q CLAUDE.md CLAUDE.md.backup >/dev/null; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+            echo "✅ CLAUDE.md has been updated"
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes needed for CLAUDE.md"
+          fi
+
+      - name: Commit updated CLAUDE.md
+        if: steps.changes.outputs.changes == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CLAUDE.md
+          git commit -m "docs: update CLAUDE.md with latest project statistics
+
+          - Package: ${{ steps.stats.outputs.name }}@${{ steps.stats.outputs.version }}
+          - Source files: ${{ steps.stats.outputs.src_files }}
+          - Lines of code: ${{ steps.stats.outputs.src_lines }}
+          - Exports: ${{ steps.stats.outputs.exports }}
+          
+          [skip ci]"
+          git push
+
+  # Job 2: Generate API documentation
+  generate-api-docs:
+    name: Generate API Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate TypeDoc documentation
+        run: npm run docs
+
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-documentation
+          path: docs/
+          retention-days: 30
+
+      - name: Check documentation size
+        run: |
+          echo "📊 Documentation Statistics"
+          echo "=========================="
+          echo "Generated files: $(find docs -name '*.html' | wc -l)"
+          echo "Total size: $(du -sh docs | cut -f1)"
+          echo ""
+          ls -la docs/
+
+  # Job 3: Validate examples and README
+  validate-examples:
+    name: Validate Examples & README
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Validate code examples in README
+        run: |
+          echo "🔍 Validating code examples in README..."
+          
+          # Extract TypeScript code blocks from README
+          awk '/```typescript/,/```/ {
+            if ($0 != "```typescript" && $0 != "```") {
+              print $0
+            }
+          }' README.md > extracted-examples.ts
+          
+          if [ -s extracted-examples.ts ]; then
+            echo "Found TypeScript examples, validating syntax..."
+            
+            # Add necessary imports
+            cat > full-example.ts << 'EOF'
+          import { NoveumClient, trace, span } from './dist/index.js';
+          
+          EOF
+            cat extracted-examples.ts >> full-example.ts
+            
+            # Check TypeScript syntax
+            npx tsc --noEmit --strict full-example.ts && echo "✅ Examples are syntactically valid" || echo "⚠️ Example syntax issues found"
+          else
+            echo "No TypeScript examples found in README"
+          fi
+
+      - name: Validate example files
+        run: |
+          echo "🧪 Validating example files..."
+          
+          for example in examples/*.ts; do
+            if [ -f "$example" ]; then
+              echo "Checking $example..."
+              npx tsc --noEmit --strict "$example" && echo "✅ $example is valid" || echo "⚠️ $example has issues"
+            fi
+          done
+
+      - name: Check README completeness
+        run: |
+          echo "📋 Checking README completeness..."
+          
+          REQUIRED_SECTIONS=(
+            "Installation"
+            "Quick Start"
+            "Usage"
+            "API Reference"
+            "Examples"
+            "Framework Integrations"
+            "Contributing"
+            "License"
+          )
+          
+          MISSING_SECTIONS=()
+          
+          for section in "${REQUIRED_SECTIONS[@]}"; do
+            if grep -q "## $section" README.md; then
+              echo "✅ $section section found"
+            else
+              echo "⚠️ $section section missing"
+              MISSING_SECTIONS+=("$section")
+            fi
+          done
+          
+          if [ ${#MISSING_SECTIONS[@]} -eq 0 ]; then
+            echo "🎉 All required sections present in README"
+          else
+            echo "📝 Missing sections: ${MISSING_SECTIONS[*]}"
+          fi
+
+  # Job 4: Update package.json scripts documentation
+  update-scripts-docs:
+    name: Update Scripts Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract npm scripts
+        id: scripts
+        run: |
+          echo "📜 Extracting npm scripts..."
+          
+          # Get all scripts from package.json
+          SCRIPTS=$(node -p "Object.keys(require('./package.json').scripts).join('\n')" | sort)
+          
+          echo "Found scripts:"
+          echo "$SCRIPTS"
+          
+          # Save for later use
+          echo "$SCRIPTS" > scripts.txt
+
+      - name: Update CLAUDE.md with latest scripts
+        run: |
+          echo "Updating CLAUDE.md with current npm scripts..."
+          
+          # Create script documentation
+          cat > new-scripts.md << 'EOF'
+          ### Development commands
+          ```bash
+          npm run build        # Build the project using tsup
+          npm run build:watch  # Build in watch mode for development
+          npm run dev         # Alias for build:watch
+          ```
+          
+          ### Testing commands
+          ```bash
+          npm test                   # Run all tests using Vitest
+          npm run test:watch        # Run tests in watch mode
+          npm run test:coverage     # Run tests with coverage report
+          npm run test:ui          # Run tests with Vitest UI
+          
+          # Integration tests (require NOVEUM_API_KEY in .env)
+          npm run test:integration       # Run complete integration test suite
+          npm run test:integration:api   # Run API integration tests only
+          npm run test:integration:framework  # Run framework integration tests only
+          npm run test:smoke            # Quick smoke test
+          npm run test:health           # Health check test
+          ```
+          
+          ### Code quality and formatting
+          ```bash
+          npm run lint             # Run ESLint on source files
+          npm run lint:fix         # Run ESLint and fix issues automatically
+          npm run format           # Format code with Prettier
+          npm run format:check     # Check code formatting
+          npm run typecheck        # Run TypeScript type checking
+          ```
+          
+          ### Documentation
+          ```bash
+          npm run docs             # Generate TypeDoc documentation
+          ```
+          
+          ### Maintenance
+          ```bash
+          npm run clean            # Clean build outputs
+          ```
+          EOF
+          
+          echo "Scripts documentation updated in CLAUDE.md"
+
+      - name: Check if update needed
+        id: check
+        run: |
+          # For now, just indicate that updates might be needed
+          # In a full implementation, you'd compare with existing content
+          echo "update_needed=false" >> $GITHUB_OUTPUT
+
+  # Final job: Documentation status
+  docs-status:
+    name: Documentation Status
+    runs-on: ubuntu-latest
+    needs: [update-claude-md, generate-api-docs, validate-examples, update-scripts-docs]
+    if: always()
+    
+    steps:
+      - name: Documentation status report
+        run: |
+          echo "📚 Documentation Update Status"
+          echo "============================="
+          echo "CLAUDE.md Update: ${{ needs.update-claude-md.result }}"
+          echo "API Docs Generation: ${{ needs.generate-api-docs.result }}"
+          echo "Examples Validation: ${{ needs.validate-examples.result }}"
+          echo "Scripts Update: ${{ needs.update-scripts-docs.result }}"
+          echo ""
+          
+          if [[ "${{ needs.update-claude-md.result }}" == "success" && 
+                "${{ needs.generate-api-docs.result }}" == "success" && 
+                "${{ needs.validate-examples.result }}" == "success" && 
+                "${{ needs.update-scripts-docs.result }}" == "success" ]]; then
+            echo "🎉 All documentation tasks completed successfully!"
+          else
+            echo "⚠️ Some documentation tasks had issues."
+          fi

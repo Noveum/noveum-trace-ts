@@ -100,7 +100,7 @@ export interface NextjsTracingOptions extends NextjsIntegrationOptions {
 /**
  * Wrap Next.js App Router API route handler with tracing
  */
-export function withNoveumTrace(
+export function withNoveumTracing(
   handler: AppRouteHandler,
   client: INoveumClient,
   options: NextjsTracingOptions = {}
@@ -167,16 +167,15 @@ export function withNoveumTrace(
         } else {
           span.setStatus(SpanStatus.OK);
         }
-
       } catch (error) {
         const errorInfo = extractErrorInfo(error);
-        
+
         span.addEvent('error', {
           'error.type': errorInfo.name,
           'error.message': errorInfo.message || '',
           'error.stack': errorInfo.stack || '',
         });
-        
+
         span.setStatus(SpanStatus.ERROR, errorInfo.message);
         throw error;
       } finally {
@@ -184,7 +183,6 @@ export function withNoveumTrace(
       }
 
       return response;
-
     } catch (error) {
       onError(error instanceof Error ? error : new Error(String(error)));
       throw error;
@@ -248,10 +246,10 @@ export function withNoveumTracePages(
       const originalEnd = res.end;
       let responseIntercepted = false;
 
-      res.end = function(chunk: any, encoding: any) {
+      res.end = function (chunk: any, encoding: any) {
         if (!responseIntercepted) {
           responseIntercepted = true;
-          
+
           span.setAttributes({
             'http.status_code': res.statusCode,
             'http.status_message': res.statusMessage || '',
@@ -275,22 +273,21 @@ export function withNoveumTracePages(
         });
       } catch (error) {
         const errorInfo = extractErrorInfo(error);
-        
+
         span.addEvent('error', {
           'error.type': errorInfo.name,
           'error.message': errorInfo.message || '',
           'error.stack': errorInfo.stack || '',
         });
-        
+
         span.setStatus(SpanStatus.ERROR, errorInfo.message);
-        
+
         if (!responseIntercepted) {
           span.finish().catch(onError);
         }
-        
+
         throw error;
       }
-
     } catch (error) {
       onError(error instanceof Error ? error : new Error(String(error)));
       throw error;
@@ -301,15 +298,9 @@ export function withNoveumTracePages(
 /**
  * Middleware for Next.js App Router
  */
-export function createNoveumMiddleware(
-  client: INoveumClient,
-  options: NextjsTracingOptions = {}
-) {
+export function createNoveumMiddleware(client: INoveumClient, options: NextjsTracingOptions = {}) {
   return async (request: NextRequest) => {
-    const {
-      enabled = true,
-      shouldTrace = defaultShouldTrace,
-    } = options;
+    const { enabled = true, shouldTrace = defaultShouldTrace } = options;
 
     if (!enabled || !shouldTrace(request)) {
       return;
@@ -328,9 +319,11 @@ export function createNoveumMiddleware(
 
     // Store span in headers for downstream handlers
     // Note: NextResponse would be imported from 'next/server' in a real Next.js app
-    const response = { 
+    const response = {
       headers: new Map(),
-      set: function(key: string, value: string) { this.headers.set(key, value); }
+      set(key: string, value: string) {
+        this.headers.set(key, value);
+      },
     } as any;
     response.headers.set('x-trace-id', span.traceId);
     response.headers.set('x-span-id', span.spanId);
@@ -350,7 +343,9 @@ export function getCurrentSpan(req: TracedNextRequest | TracedNextApiRequest): I
 /**
  * Get current trace ID from Next.js request
  */
-export function getCurrentTraceId(req: TracedNextRequest | TracedNextApiRequest): string | undefined {
+export function getCurrentTraceId(
+  req: TracedNextRequest | TracedNextApiRequest
+): string | undefined {
   return req.trace?.traceId;
 }
 
@@ -386,10 +381,7 @@ export function addSpanEvent(
  * Note: This is a placeholder implementation. In practice, you might need to use
  * React's experimental features or implement this differently based on your specific needs.
  */
-export function withTracing<P extends object>(
-  Component: any,
-  _spanName?: string
-) {
+export function withTracing<P extends object>(Component: any, _spanName?: string) {
   return async function TracedComponent(props: P) {
     // For now, we'll just render the component
     // In a full implementation, you'd want to create a span around the rendering
@@ -419,7 +411,10 @@ function defaultGetAttributes(request: NextRequest): Record<string, any> {
   };
 }
 
-function defaultGetPagesAttributes(req: NextApiRequest, _res: NextApiResponse): Record<string, any> {
+function defaultGetPagesAttributes(
+  req: NextApiRequest,
+  _res: NextApiResponse
+): Record<string, any> {
   return {
     'http.scheme': 'http', // Default, might need to detect HTTPS
     'http.host': req.headers.host || '',
@@ -430,21 +425,21 @@ function defaultGetPagesAttributes(req: NextApiRequest, _res: NextApiResponse): 
 function defaultShouldTrace(request: NextRequest): boolean {
   const url = new URL(request.url);
   const pathname = url.pathname.toLowerCase();
-  
+
   // Skip Next.js internal routes and static assets
-  return !pathname.startsWith('/_next/') &&
-         !pathname.startsWith('/api/_') &&
-         !pathname.includes('/favicon.ico') &&
-         !pathname.match(/\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/);
+  return (
+    !pathname.startsWith('/_next/') &&
+    !pathname.startsWith('/api/_') &&
+    !pathname.includes('/favicon.ico') &&
+    !pathname.match(/\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/)
+  );
 }
 
 function defaultShouldTracePages(req: NextApiRequest): boolean {
   const url = req.url?.toLowerCase() || '';
-  
+
   // Skip internal routes and health checks
-  return !url.startsWith('/_') &&
-         !url.includes('/health') &&
-         !url.includes('/metrics');
+  return !url.startsWith('/_') && !url.includes('/health') && !url.includes('/metrics');
 }
 
 function defaultOnError(error: Error): void {
@@ -488,4 +483,3 @@ export function createTracedPagesRoute(
 ): PagesApiHandler {
   return withNoveumTracePages(handler, client, options);
 }
-

@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Span } from '../src/core/span.js';
+import { StandaloneSpan as Span } from '../src/core/span-standalone.js';
 import { SpanStatus, SpanKind } from '../src/core/types.js';
 import type { SpanOptions } from '../src/core/types.js';
+
+interface ExtendedSpanOptions extends SpanOptions {
+  traceId: string;
+  client?: any;
+  enabled?: boolean;
+}
 
 describe('Span', () => {
   let span: Span;
@@ -10,7 +16,8 @@ describe('Span', () => {
   };
 
   beforeEach(() => {
-    const options: SpanOptions = {
+    mockClient._addFinishedSpan.mockClear(); // Reset the mock between tests
+    const options: ExtendedSpanOptions = {
       traceId: 'test-trace-id',
       client: mockClient as any,
     };
@@ -27,7 +34,7 @@ describe('Span', () => {
     });
 
     it('should set optional properties', () => {
-      const options: SpanOptions = {
+      const options: ExtendedSpanOptions = {
         traceId: 'test-trace-id',
         parentSpanId: 'parent-span-id',
         kind: SpanKind.CLIENT,
@@ -98,7 +105,7 @@ describe('Span', () => {
       expect(serialized.events).toHaveLength(1);
       expect(serialized.events[0].name).toBe('test.event');
       expect(serialized.events[0].attributes).toEqual({ 'event.key': 'event.value' });
-      expect(serialized.events[0].timestamp).toBeInstanceOf(Date);
+      expect(typeof serialized.events[0].timestamp).toBe('string');
     });
 
     it('should add event without attributes', () => {
@@ -181,10 +188,11 @@ describe('Span', () => {
         events: expect.arrayContaining([
           expect.objectContaining({
             name: 'test.event',
-            timestamp: expect.any(Date),
+            timestamp: expect.any(String),
             attributes: {},
           }),
         ]),
+        links: [],
       });
     });
 

@@ -1,0 +1,455 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Job 1: PR Metadata Validation
+  pr-metadata:
+    name: PR Metadata Validation
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Validate PR title
+        run: |
+          echo "🔍 Validating PR title: '${{ github.event.pull_request.title }}'"
+
+          # Check if title follows conventional commit format
+          TITLE="${{ github.event.pull_request.title }}"
+
+          # Define valid prefixes
+          VALID_PREFIXES=("feat" "fix" "docs" "style" "refactor" "test" "chore" "ci" "perf" "build")
+
+          VALID=false
+          for prefix in "${VALID_PREFIXES[@]}"; do
+            if [[ $TITLE =~ ^$prefix(\(.+\))?:\ .+ ]]; then
+              VALID=true
+              echo "✅ Title follows conventional commit format with '$prefix' type"
+              break
+            fi
+          done
+
+          if [ "$VALID" = false ]; then
+            echo "❌ PR title doesn't follow conventional commit format"
+            echo "Expected format: type(scope): description"
+            echo "Valid types: ${VALID_PREFIXES[*]}"
+            echo "Examples:"
+            echo "  feat: add new tracing feature"
+            echo "  fix(client): resolve connection timeout issue"
+            echo "  docs: update API documentation"
+            exit 1
+          fi
+
+      - name: Validate PR description
+        run: |
+          echo "📝 Validating PR description..."
+
+          DESCRIPTION="${{ github.event.pull_request.body }}"
+
+          if [ -z "$DESCRIPTION" ] || [ ${#DESCRIPTION} -lt 20 ]; then
+            echo "❌ PR description is too short or missing"
+            echo "Please provide a meaningful description of your changes"
+            exit 1
+          fi
+
+          # Check for required sections (basic check)
+          if [[ $DESCRIPTION == *"## "* ]]; then
+            echo "✅ PR description has good structure"
+          else
+            echo "⚠️ Consider adding sections to your PR description (## What, ## Why, ## How)"
+          fi
+
+      - name: Check PR size
+        run: |
+          echo "📊 Analyzing PR size..."
+
+          CHANGED_FILES="${{ github.event.pull_request.changed_files }}"
+          ADDITIONS="${{ github.event.pull_request.additions }}"
+          DELETIONS="${{ github.event.pull_request.deletions }}"
+
+          echo "Files changed: $CHANGED_FILES"
+          echo "Lines added: $ADDITIONS"
+          echo "Lines deleted: $DELETIONS"
+
+          # Warn if PR is very large
+          if [ $CHANGED_FILES -gt 20 ] || [ $ADDITIONS -gt 1000 ]; then
+            echo "⚠️ This is a large PR. Consider breaking it into smaller ones."
+            echo "Large PRs are harder to review and more likely to introduce bugs."
+          else
+            echo "✅ PR size looks reasonable"
+          fi
+
+  # Job 2: Code Quality Checks
+  code-quality:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: |
+          echo "🔍 Running ESLint..."
+          npm run lint || {
+            echo "❌ Linting failed. Please fix the issues and push again."
+            echo "Run 'npm run lint:fix' to automatically fix some issues."
+            exit 1
+          }
+
+      - name: Check code formatting
+        run: |
+          echo "🎨 Checking code formatting..."
+          npm run format:check || {
+            echo "❌ Code formatting issues found."
+            echo "Run 'npm run format' to fix formatting issues."
+            exit 1
+          }
+
+      - name: Type checking
+        run: |
+          echo "🔧 Running TypeScript type checking..."
+          npm run typecheck || {
+            echo "❌ TypeScript errors found. Please fix them before merging."
+            exit 1
+          }
+
+  # Job 3: Test Coverage Analysis
+  test-coverage:
+    name: Test Coverage Analysis
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run base coverage
+        run: |
+          npm test -- --coverage --reporter=json > base-coverage.json 2>/dev/null || echo "Base coverage failed"
+
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install dependencies (PR)
+        run: npm ci
+
+      - name: Run PR coverage
+        run: |
+          npm test -- --coverage --reporter=json > pr-coverage.json 2>/dev/null || echo "PR coverage failed"
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Noveum/noveum-trace-ts
+          file: ./coverage/lcov.info
+          flags: pr-validation
+          name: codecov-pr
+
+      - name: Compare coverage
+        run: |
+          echo "📊 Coverage Analysis"
+          echo "==================="
+
+          if [ -f coverage/lcov.info ]; then
+            echo "✅ Coverage report generated for PR"
+            
+            # Simple coverage check
+            if command -v lcov >/dev/null; then
+              COVERAGE_PERCENT=$(lcov --summary coverage/lcov.info 2>/dev/null | grep -E "lines\.\.\.\.\.\." | grep -oE "[0-9.]+%" | head -1 || echo "unknown")
+              echo "Current coverage: $COVERAGE_PERCENT"
+              
+              # Extract numeric value
+              COVERAGE_NUM=$(echo $COVERAGE_PERCENT | grep -oE "[0-9.]+" || echo "0")
+              
+              if (( $(echo "$COVERAGE_NUM < 70" | bc -l) )); then
+                echo "⚠️ Coverage is below 70%. Consider adding more tests."
+              else
+                echo "✅ Good test coverage!"
+              fi
+            fi
+          else
+            echo "⚠️ No coverage report generated"
+          fi
+
+  # Job 4: Breaking Changes Detection
+  breaking-changes:
+    name: Breaking Changes Detection
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Check for breaking changes
+        run: |
+          echo "🔍 Checking for potential breaking changes..."
+
+          # Check if main export file has changes
+          if ! diff -q base/src/index.ts pr/src/index.ts >/dev/null 2>&1; then
+            echo "⚠️ Changes detected in src/index.ts (main exports)"
+            echo "Please verify that no public APIs have been removed or changed"
+          fi
+
+          # Check package.json for version changes
+          BASE_VERSION=$(cd base && node -p "require('./package.json').version" 2>/dev/null || echo "unknown")
+          PR_VERSION=$(cd pr && node -p "require('./package.json').version" 2>/dev/null || echo "unknown")
+
+          if [ "$BASE_VERSION" != "$PR_VERSION" ]; then
+            echo "📦 Version change detected: $BASE_VERSION → $PR_VERSION"
+            
+            # Check if it's a major version bump
+            if [[ $PR_VERSION == *.0.0 ]] && [[ $BASE_VERSION != *.0.0 ]]; then
+              echo "🚨 Major version bump detected - this indicates breaking changes"
+            fi
+          fi
+
+          # Check for interface changes
+          INTERFACE_CHANGES=$(diff -r base/src pr/src | grep -E "interface|type.*=" | head -10 || echo "")
+          if [ -n "$INTERFACE_CHANGES" ]; then
+            echo "⚠️ Type/interface changes detected:"
+            echo "$INTERFACE_CHANGES"
+            echo "Please verify backward compatibility"
+          fi
+
+  # Job 5: Performance Impact Check
+  performance-impact:
+    name: Performance Impact Check
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and check bundle size
+        run: |
+          echo "📦 Checking bundle size impact..."
+          npm run build
+
+          # Check main bundle size
+          BUNDLE_SIZE=$(stat -c%s dist/index.mjs)
+          echo "Main bundle size: $BUNDLE_SIZE bytes"
+
+          # Set reasonable limits
+          if [ $BUNDLE_SIZE -gt 512000 ]; then  # 500KB
+            echo "⚠️ Bundle size is larger than 500KB"
+            echo "Consider code splitting or reducing dependencies"
+          else
+            echo "✅ Bundle size looks good"
+          fi
+
+          # List all files and their sizes
+          echo ""
+          echo "📊 All bundle files:"
+          ls -lh dist/ | awk '{print $5 "\t" $9}'
+
+      - name: Performance smoke test
+        run: |
+          echo "🚀 Running performance smoke test..."
+
+          cat > pr-perf-test.js << 'EOF'
+          const { NoveumClient } = require('./dist/index.js');
+
+          async function perfTest() {
+            const client = new NoveumClient({
+              apiKey: 'test-key',
+              project: 'pr-perf-test',
+              enabled: false
+            });
+
+            console.time('Create 100 traces');
+            const promises = [];
+            for (let i = 0; i < 100; i++) {
+              promises.push(client.createTrace(`trace-${i}`, {
+                attributes: { index: i }
+              }));
+            }
+            await Promise.all(promises);
+            console.timeEnd('Create 100 traces');
+            
+            await client.shutdown();
+          }
+
+          perfTest().catch(console.error);
+          EOF
+
+          node pr-perf-test.js
+
+  # Job 6: Security Review
+  security-review:
+    name: Security Review
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Security audit
+        run: |
+          echo "🔒 Running security audit..."
+          npm audit --audit-level=moderate || {
+            echo "⚠️ Security vulnerabilities found"
+            echo "Please review and fix security issues"
+          }
+
+      - name: Check for sensitive data
+        run: |
+          echo "🔍 Scanning for potential sensitive data..."
+
+          # Check for common sensitive patterns
+          SENSITIVE_PATTERNS=(
+            "password"
+            "secret"
+            "private.*key"
+            "api.*key"
+            "token"
+            "credential"
+          )
+
+          FOUND_ISSUES=false
+
+          for pattern in "${SENSITIVE_PATTERNS[@]}"; do
+            if grep -ri "$pattern" src/ --include="*.ts" --exclude-dir=node_modules | grep -v "test\|spec\|example"; then
+              echo "⚠️ Found potential sensitive data pattern: $pattern"
+              FOUND_ISSUES=true
+            fi
+          done
+
+          if [ "$FOUND_ISSUES" = false ]; then
+            echo "✅ No obvious sensitive data patterns found"
+          else
+            echo "⚠️ Please review the flagged items to ensure no sensitive data is exposed"
+          fi
+
+  # Final job: PR validation summary
+  pr-validation-summary:
+    name: PR Validation Summary
+    runs-on: ubuntu-latest
+    needs:
+      [
+        pr-metadata,
+        code-quality,
+        test-coverage,
+        breaking-changes,
+        performance-impact,
+        security-review,
+      ]
+    if: always() && github.event.pull_request.draft == false
+
+    steps:
+      - name: Generate validation summary
+        run: |
+          echo "📋 Pull Request Validation Summary"
+          echo "=================================="
+          echo "PR: #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}"
+          echo "Author: ${{ github.event.pull_request.user.login }}"
+          echo "Base: ${{ github.event.pull_request.base.ref }}"
+          echo "Head: ${{ github.event.pull_request.head.ref }}"
+          echo ""
+          echo "Validation Results:"
+          echo "-------------------"
+          echo "Metadata: ${{ needs.pr-metadata.result }}"
+          echo "Code Quality: ${{ needs.code-quality.result }}"
+          echo "Test Coverage: ${{ needs.test-coverage.result }}"
+          echo "Breaking Changes: ${{ needs.breaking-changes.result }}"
+          echo "Performance: ${{ needs.performance-impact.result }}"
+          echo "Security: ${{ needs.security-review.result }}"
+          echo ""
+
+          # Count successful validations
+          RESULTS=("${{ needs.pr-metadata.result }}" 
+                   "${{ needs.code-quality.result }}"
+                   "${{ needs.test-coverage.result }}"
+                   "${{ needs.breaking-changes.result }}"
+                   "${{ needs.performance-impact.result }}"
+                   "${{ needs.security-review.result }}")
+
+          SUCCESS_COUNT=0
+          for result in "${RESULTS[@]}"; do
+            if [ "$result" = "success" ]; then
+              ((SUCCESS_COUNT++))
+            fi
+          done
+
+          echo "Validation Score: $SUCCESS_COUNT/6 checks passed"
+
+          if [ $SUCCESS_COUNT -eq 6 ]; then
+            echo "🎉 All validations passed! This PR is ready for review."
+          elif [ $SUCCESS_COUNT -ge 4 ]; then
+            echo "✅ Most validations passed. Please address any remaining issues."
+          else
+            echo "❌ Multiple validations failed. Please fix the issues before requesting review."
+            exit 1
+          fi

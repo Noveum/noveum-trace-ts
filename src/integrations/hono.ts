@@ -162,25 +162,23 @@ export function noveumTrace(
 
         responseFinished = true;
         await span.finish();
-
       } catch (error) {
         const errorInfo = extractErrorInfo(error);
-        
+
         span.addEvent('error', {
           'error.type': errorInfo.name,
           'error.message': errorInfo.message || '',
           'error.stack': errorInfo.stack || '',
         });
-        
+
         span.setStatus(SpanStatus.ERROR, errorInfo.message);
-        
+
         if (!responseFinished) {
           await span.finish();
         }
-        
+
         throw error;
       }
-
     } catch (error) {
       onError(error instanceof Error ? error : new Error(String(error)), c);
       throw error;
@@ -215,7 +213,11 @@ export function addSpanAttributes(c: TracedContext, attributes: Record<string, a
 /**
  * Add an event to the current request span
  */
-export function addSpanEvent(c: TracedContext, name: string, attributes?: Record<string, any>): void {
+export function addSpanEvent(
+  c: TracedContext,
+  name: string,
+  attributes?: Record<string, any>
+): void {
   const span = c.trace?.span;
   if (span && !span.isFinished) {
     span.addEvent(name, attributes);
@@ -226,36 +228,31 @@ export function addSpanEvent(c: TracedContext, name: string, attributes?: Record
  * Higher-order function to wrap Hono route handlers with tracing
  */
 export function traced(client: INoveumClient, spanName?: string) {
-  return function(target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;
-    
-    descriptor.value = async function(c: TracedContext) {
+
+    descriptor.value = async function (c: TracedContext) {
       const currentSpan = c.trace?.span;
-      
+
       if (!currentSpan) {
         return originalMethod.call(this, c);
       }
 
       const childSpanName = spanName || `${target.constructor.name}.${propertyKey}`;
-      
-      try {
-        // Create child span for the handler
-        const childSpan = await client.startSpan(childSpanName, {
-          parentSpanId: currentSpan.spanId,
-        });
-        
-        const result = await getGlobalContextManager().withSpanAsync(childSpan, async () => {
-          return originalMethod.call(this, c);
-        });
-        
-        await childSpan.finish();
-        return result;
-      } catch (error) {
-        // Error will be handled by the middleware
-        throw error;
-      }
+
+      // Create child span for the handler
+      const childSpan = await client.startSpan(childSpanName, {
+        parentSpanId: currentSpan.spanId,
+      });
+
+      const result = await getGlobalContextManager().withSpanAsync(childSpan, async () => {
+        return originalMethod.call(this, c);
+      });
+
+      await childSpan.finish();
+      return result;
     };
-    
+
     return descriptor;
   };
 }
@@ -270,7 +267,7 @@ export function createTracedHandler<T extends Context = Context>(
 ) {
   return async (c: T & TracedContext) => {
     const currentSpan = c.trace?.span;
-    
+
     if (!currentSpan) {
       return handler(c);
     }
@@ -279,12 +276,12 @@ export function createTracedHandler<T extends Context = Context>(
     const childSpan = await client.startSpan(childSpanName, {
       parentSpanId: currentSpan.spanId,
     });
-    
+
     try {
       const result = await getGlobalContextManager().withSpanAsync(childSpan, async () => {
         return handler(c);
       });
-      
+
       await childSpan.finish();
       return result;
     } catch (error) {
@@ -300,12 +297,12 @@ export function createTracedHandler<T extends Context = Context>(
 export function timingMiddleware(): MiddlewareHandler {
   return async (c: TracedContext, next: Next) => {
     const start = performance.now();
-    
+
     await next();
-    
+
     const duration = performance.now() - start;
     const span = c.trace?.span;
-    
+
     if (span && !span.isFinished) {
       span.setAttribute('http.duration_ms', duration);
     }
@@ -315,20 +312,18 @@ export function timingMiddleware(): MiddlewareHandler {
 /**
  * Middleware to capture request/response body
  */
-export function bodyCapturingMiddleware(options: {
-  captureRequest?: boolean;
-  captureResponse?: boolean;
-  maxBodySize?: number;
-} = {}): MiddlewareHandler {
-  const {
-    captureRequest = false,
-    captureResponse = false,
-    maxBodySize = 1000,
-  } = options;
+export function bodyCapturingMiddleware(
+  options: {
+    captureRequest?: boolean;
+    captureResponse?: boolean;
+    maxBodySize?: number;
+  } = {}
+): MiddlewareHandler {
+  const { captureRequest = false, captureResponse = false, maxBodySize = 1000 } = options;
 
   return async (c: TracedContext, next: Next) => {
     const span = c.trace?.span;
-    
+
     if (!span || span.isFinished) {
       return next();
     }
@@ -337,11 +332,11 @@ export function bodyCapturingMiddleware(options: {
     if (captureRequest) {
       try {
         const contentType = c.req.header('Content-Type') || '';
-        
+
         if (contentType.includes('application/json') || contentType.includes('text/')) {
           if (c.req.text) {
             const body = await c.req.text();
-            
+
             if (body.length <= maxBodySize) {
               span.setAttribute('http.request.body', body);
             } else {
@@ -349,7 +344,7 @@ export function bodyCapturingMiddleware(options: {
             }
           }
         }
-      } catch (error) {
+      } catch {
         span.setAttribute('http.request.body_error', 'Failed to capture body');
       }
     }
@@ -360,13 +355,13 @@ export function bodyCapturingMiddleware(options: {
     if (captureResponse && c.res && c.res.text) {
       try {
         const responseText = c.res.text;
-        
+
         if (responseText.length <= maxBodySize) {
           span.setAttribute('http.response.body', responseText);
         } else {
           span.setAttribute('http.response.body_size', responseText.length);
         }
-      } catch (error) {
+      } catch {
         span.setAttribute('http.response.body_error', 'Failed to capture body');
       }
     }
@@ -404,13 +399,13 @@ function defaultOnError(error: Error, _c: TracedContext): void {
 export function createTracedApp(client: INoveumClient, options?: HonoTracingOptions) {
   const { Hono } = require('hono');
   const app = new Hono();
-  
+
   // Add tracing middleware
   app.use('*', noveumTrace(client, options));
-  
+
   // Add timing middleware
   app.use('*', timingMiddleware());
-  
+
   return app;
 }
 
@@ -421,9 +416,9 @@ export function createNoveumPlugin(client: INoveumClient, options?: HonoTracingO
   return {
     middleware: noveumTrace(client, options),
     timingMiddleware: timingMiddleware(),
-    bodyCapturingMiddleware: bodyCapturingMiddleware,
+    bodyCapturingMiddleware,
     traced,
-    createTracedHandler: (handler: any, spanName?: string) => 
+    createTracedHandler: (handler: any, spanName?: string) =>
       createTracedHandler(client, handler, spanName),
     getCurrentSpan,
     getCurrentTraceId,
@@ -431,4 +426,3 @@ export function createNoveumPlugin(client: INoveumClient, options?: HonoTracingO
     addSpanEvent,
   };
 }
-
