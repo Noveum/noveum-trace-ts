@@ -1,6 +1,6 @@
 /**
  * Integration Test Runner
- * 
+ *
  * Runs comprehensive integration tests to validate the SDK works correctly
  * with the real Noveum API and framework integrations.
  */
@@ -30,32 +30,32 @@ function formatApiKeyForLogging(apiKey: string | undefined): string {
   if (!apiKey) {
     return 'Not provided';
   }
-  
+
   // Option to completely disable API key logging in CI/CD
   if (process.env.DISABLE_API_KEY_LOGGING === 'true') {
     return 'Hidden (DISABLE_API_KEY_LOGGING=true)';
   }
-  
+
   // Show only minimal portion: first 4 chars and last 2 chars
   if (apiKey.length < 8) {
     return '***'; // Too short to safely expose any portion
   }
-  
+
   return `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 2)}`;
 }
 
 async function runAllIntegrationTests() {
   console.log('🎯 Noveum Trace TypeScript SDK - Complete Integration Test Suite');
-  console.log('=' .repeat(70));
+  console.log('='.repeat(70));
   console.log(`📅 Test Run: ${new Date().toISOString()}`);
   console.log(`🔑 API Key: ${formatApiKeyForLogging(API_KEY)}`);
   console.log(`📂 Project: ${PROJECT}`);
   console.log(`🌍 Environment: ${ENVIRONMENT}`);
-  console.log('=' .repeat(70));
+  console.log('='.repeat(70));
 
   // Check if we can run integration tests
   const skipTests = !API_KEY || API_KEY.startsWith('your-') || API_KEY === 'test-api-key';
-  
+
   if (skipTests) {
     console.log('⚠️  SKIPPING INTEGRATION TESTS');
     console.log('   Reason: No valid API key found in .env file');
@@ -74,29 +74,28 @@ async function runAllIntegrationTests() {
   try {
     // Run API Integration Tests
     console.log('\n🚀 Phase 1: API Integration Tests');
-    console.log('-' .repeat(50));
+    console.log('-'.repeat(50));
     await runIntegrationTests();
 
-    // Run Framework Integration Tests  
+    // Run Framework Integration Tests
     console.log('\n🌐 Phase 2: Framework Integration Tests');
-    console.log('-' .repeat(50));
+    console.log('-'.repeat(50));
     const frameworkSuite = new FrameworkIntegrationTestSuite();
     await frameworkSuite.runAllTests();
 
     console.log('\n✅ All integration test phases completed successfully!');
-
   } catch (error) {
     console.error('\n💥 Integration tests failed:', formatError(error));
     allTestsPassed = false;
   }
 
   const totalDuration = Date.now() - startTime;
-  
+
   console.log('\n🎉 Integration Test Suite Complete');
-  console.log('=' .repeat(70));
+  console.log('='.repeat(70));
   console.log(`⏱️  Total Duration: ${totalDuration}ms (${Math.round(totalDuration / 1000)}s)`);
   console.log(`📊 Overall Result: ${allTestsPassed ? '✅ PASSED' : '❌ FAILED'}`);
-  
+
   if (allTestsPassed) {
     console.log('\n🎯 SDK Validation Summary:');
     console.log('✅ API Authentication & Connectivity');
@@ -109,7 +108,9 @@ async function runAllIntegrationTests() {
     console.log('');
     console.log('🚀 The TypeScript SDK is ready for production use!');
   } else {
-    console.log('\n⚠️  Some tests failed. Review the errors above and fix issues before production use.');
+    console.log(
+      '\n⚠️  Some tests failed. Review the errors above and fix issues before production use.'
+    );
     process.exit(1);
   }
 }
@@ -118,18 +119,18 @@ async function runAllIntegrationTests() {
 export async function healthCheck(): Promise<boolean> {
   try {
     const { NoveumClient } = await import('../../src/index.js');
-    
+
     // Quick health check - just verify client can be created
     const client = new NoveumClient({
       apiKey: API_KEY || 'test-key',
       project: PROJECT,
       environment: 'health-check',
-      enabled: false // Don't actually send data
+      enabled: false, // Don't actually send data
     });
 
     const config = client.getConfig();
     await client.shutdown();
-    
+
     return config.project === PROJECT;
   } catch (error) {
     console.error('Health check failed:', formatError(error));
@@ -141,36 +142,36 @@ export async function healthCheck(): Promise<boolean> {
 export async function smokeTest(): Promise<boolean> {
   try {
     console.log('💨 Running smoke test...');
-    
+
     const { NoveumClient, formatPythonCompatibleTimestamp } = await import('../../src/index.js');
-    
+
     const client = new NoveumClient({
       apiKey: 'smoke-test-key',
       project: 'smoke-test',
       environment: 'test',
-      enabled: false // Don't send to API
+      enabled: false, // Don't send to API
     });
 
     // Test trace creation
     const trace = await client.createTrace('smoke-test-trace', {
       attributes: {
         'test.type': 'smoke',
-        'test.timestamp': formatPythonCompatibleTimestamp()
-      }
+        'test.timestamp': formatPythonCompatibleTimestamp(),
+      },
     });
 
     // Test span creation
     const span = await client.startSpan('smoke-test-span', {
-      traceId: trace.traceId
+      traceId: trace.traceId,
     });
 
     // Test operations
     span.setAttribute('test.success', true);
     span.addEvent('smoke-test-event', { result: 'success' });
-    
+
     await span.finish();
     await trace.finish();
-    
+
     // Test serialization
     const serialized = trace.serialize();
     if (!serialized.traceId || !serialized.status || !serialized.spans) {
@@ -178,7 +179,7 @@ export async function smokeTest(): Promise<boolean> {
     }
 
     await client.shutdown();
-    
+
     console.log('✅ Smoke test passed');
     return true;
   } catch (error) {
@@ -193,7 +194,7 @@ export { runAllIntegrationTests };
 // CLI interface
 if (import.meta.url === `file://${process.argv[1]}`) {
   const command = process.argv[2];
-  
+
   switch (command) {
     case 'health':
       healthCheck().then(passed => {
@@ -201,13 +202,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         process.exit(passed ? 0 : 1);
       });
       break;
-      
+
     case 'smoke':
       smokeTest().then(passed => {
         process.exit(passed ? 0 : 1);
       });
       break;
-      
+
     default:
       runAllIntegrationTests().catch(error => {
         console.error('Test runner failed:', formatError(error));

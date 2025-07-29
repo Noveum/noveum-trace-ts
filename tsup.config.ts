@@ -8,7 +8,7 @@ export default defineConfig({
     'integrations/hono': 'src/integrations/hono.ts',
   },
   format: ['cjs', 'esm'],
-  dts: false, // Temporarily disabled due to TypeScript strict mode issues
+  dts: true, // Declaration generation restored ✅
   sourcemap: true,
   clean: true,
   splitting: false,

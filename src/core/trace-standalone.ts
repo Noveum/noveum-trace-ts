@@ -90,7 +90,10 @@ export class StandaloneTrace implements ITrace {
    */
   setAttributes(attributes: Attributes): void {
     if (this._isFinished) {
-      console.warn('Cannot set attributes on a finished trace');
+      // Only warn in non-test environments to avoid noise during testing
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('Cannot set attributes on a finished trace');
+      }
       return;
     }
 
@@ -105,7 +108,10 @@ export class StandaloneTrace implements ITrace {
    */
   setAttribute(key: string, value: Attributes[string]): void {
     if (this._isFinished) {
-      console.warn('Cannot set attribute on a finished trace');
+      // Only warn in non-test environments to avoid noise during testing
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('Cannot set attribute on a finished trace');
+      }
       return;
     }
 
@@ -173,8 +179,8 @@ export class StandaloneTrace implements ITrace {
     if ('serialize' in span && typeof span.serialize === 'function') {
       // Store a reference to add to _spans when finished
       const originalFinish = span.finish;
-      span.finish = async (...args: any[]) => {
-        await originalFinish.apply(span, args);
+      span.finish = async (endTime?: Date) => {
+        await originalFinish.call(span, endTime);
         this._spans.push(span.serialize());
       };
     }

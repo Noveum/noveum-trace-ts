@@ -93,8 +93,8 @@ jobs:
           # Count lines of code
           echo "Lines of code by category:"
           echo "Source files (.ts): $(find src -name '*.ts' -exec wc -l {} + | tail -1 | awk '{print $1}')"
-          echo "Test files (.test.ts): $(find . -name '*.test.ts' -exec wc -l {} + | tail -1 | awk '{print $1}' 2>/dev/null || echo 0)"
-          echo "Integration tests: $(find tests -name '*.ts' -exec wc -l {} + | tail -1 | awk '{print $1}' 2>/dev/null || echo 0)"
+          echo "Unit test files (.test.ts): $(find tests/unit -name '*.test.ts' -exec wc -l {} + | tail -1 | awk '{print $1}' 2>/dev/null || echo 0)"
+          echo "Integration tests: $(find tests/integration -name '*.ts' -exec wc -l {} + | tail -1 | awk '{print $1}' 2>/dev/null || echo 0)"
 
           # Function count
           echo ""
@@ -104,7 +104,7 @@ jobs:
       - name: Test coverage analysis
         run: |
           echo "🧪 Running test coverage analysis..."
-          npm test -- --coverage --reporter=json > coverage-report.json 2>/dev/null || true
+          NODE_ENV=test npm test -- --coverage --reporter=json > coverage-report.json 2>/dev/null || true
 
           if [ -f coverage/lcov.info ]; then
             echo "✅ Coverage report generated"
@@ -121,7 +121,7 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: Noveum/noveum-trace-ts
+          slug: Noveum/noveum-trace-typescript
           files: ./coverage/lcov.info
           flags: maintenance
           name: codecov-maintenance

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { StandaloneSpan as Span } from '../src/core/span-standalone.js';
-import { SpanStatus, SpanKind } from '../src/core/types.js';
-import type { SpanOptions } from '../src/core/types.js';
+import { StandaloneSpan as Span } from '../../src/core/span-standalone.js';
+import { SpanStatus, SpanKind } from '../../src/core/types.js';
+import type { SpanOptions } from '../../src/core/types.js';
 
 interface ExtendedSpanOptions extends SpanOptions {
   traceId: string;

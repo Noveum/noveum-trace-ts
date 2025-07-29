@@ -33,7 +33,7 @@ function getGlobalClient(): any {
  */
 export function trace(nameOrOptions?: string | TraceOptions, options?: TraceOptions) {
   return function <T extends (...args: any[]) => any>(
-    target: any,
+    target: object,
     propertyKey: string | symbol,
     descriptor: TypedPropertyDescriptor<T>
   ): TypedPropertyDescriptor<T> {
@@ -57,7 +57,7 @@ export function trace(nameOrOptions?: string | TraceOptions, options?: TraceOpti
       traceName = `${target.constructor.name}.${String(propertyKey)}`;
     }
 
-    descriptor.value = function (this: any, ...args: any[]) {
+    descriptor.value = function (this: unknown, ...args: any[]) {
       const client = getGlobalClient();
 
       try {

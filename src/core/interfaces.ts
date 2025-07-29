@@ -301,10 +301,9 @@ export interface ISampler {
   /**
    * Make a sampling decision for a trace
    * @param traceId - Trace ID
-   * @param name - Trace name
-   * @param attributes - Trace attributes
+   * @param name - Trace name (optional)
    */
-  shouldSample(traceId: string, name: string, attributes?: Attributes): boolean;
+  shouldSample(traceId: string, name?: string): boolean;
 }
 
 /**

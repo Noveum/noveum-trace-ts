@@ -1,6 +1,6 @@
 /**
  * API Integration Tests
- * 
+ *
  * Tests the SDK against the real Noveum API to ensure:
  * - Authentication works correctly
  * - Trace submission succeeds
@@ -11,8 +11,6 @@
 
 import { NoveumClient, formatPythonCompatibleTimestamp } from '../../src/index.js';
 import { config } from 'dotenv';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 
 // Load environment variables
 config();
@@ -52,12 +50,14 @@ class IntegrationTestSuite {
 
   async runAllTests(): Promise<void> {
     console.log('🚀 Starting API Integration Tests');
-    console.log('=' .repeat(50));
+    console.log('='.repeat(50));
     console.log(`📡 API Endpoint: ${ENDPOINT}`);
-    console.log(`🔑 API Key: ${API_KEY?.substring(0, 10)}...${API_KEY?.substring(API_KEY.length - 5)}`);
+    console.log(
+      `🔑 API Key: ${API_KEY?.substring(0, 10)}...${API_KEY?.substring(API_KEY.length - 5)}`
+    );
     console.log(`📂 Project: ${PROJECT}`);
     console.log(`🌍 Environment: ${ENVIRONMENT}`);
-    console.log('=' .repeat(50));
+    console.log('='.repeat(50));
     console.log();
 
     await this.testBasicConnection();
@@ -74,26 +74,26 @@ class IntegrationTestSuite {
 
   private async runTest(name: string, testFn: () => Promise<void>): Promise<TestResult> {
     const startTime = Date.now();
-    
+
     try {
       console.log(`🧪 ${name}...`);
       await testFn();
       const duration = Date.now() - startTime;
       console.log(`   ✅ Passed (${duration}ms)`);
-      
+
       const result: TestResult = { name, success: true, duration };
       this.results.push(result);
       return result;
     } catch (error) {
       const duration = Date.now() - startTime;
       console.log(`   ❌ Failed (${duration}ms): ${formatError(error)}`);
-      
-      const result: TestResult = { 
-        name, 
-        success: false, 
-        duration, 
+
+      const result: TestResult = {
+        name,
+        success: false,
+        duration,
         error: formatError(error),
-        details: (error as Error).stack 
+        details: (error as Error).stack,
       };
       this.results.push(result);
       return result;
@@ -108,7 +108,7 @@ class IntegrationTestSuite {
         environment: ENVIRONMENT,
         endpoint: ENDPOINT,
         debug: true,
-        enabled: true
+        enabled: true,
       });
 
       // Verify client configuration
@@ -133,23 +133,23 @@ class IntegrationTestSuite {
           'test.method': 'single-trace',
           'test.timestamp': formatPythonCompatibleTimestamp(),
           'sdk.name': 'noveum-trace-typescript',
-          'sdk.version': '1.0.0'
-        }
+          'sdk.version': '1.0.0',
+        },
       });
 
       // Add some events
       trace.addEvent('test-started', {
         'event.type': 'start',
-        'test.phase': 'initialization'
+        'test.phase': 'initialization',
       });
 
       // Simulate some work
       await new Promise(resolve => setTimeout(resolve, 50));
-      
+
       trace.addEvent('work-completed', {
         'event.type': 'completion',
         'test.phase': 'work',
-        'duration.ms': 50
+        'duration.ms': 50,
       });
 
       // Finish the trace
@@ -178,13 +178,13 @@ class IntegrationTestSuite {
             'test.method': 'batch-traces',
             'test.batch.index': i,
             'test.batch.size': batchSize,
-            'test.timestamp': formatPythonCompatibleTimestamp()
-          }
+            'test.timestamp': formatPythonCompatibleTimestamp(),
+          },
         });
 
         trace.addEvent('batch-item-created', {
           'batch.index': i,
-          'batch.total': batchSize
+          'batch.total': batchSize,
         });
 
         await trace.finish();
@@ -208,37 +208,37 @@ class IntegrationTestSuite {
           'test.suite': 'api-integration',
           'test.method': 'complex-trace',
           'workflow.type': 'multi-agent',
-          'test.timestamp': formatPythonCompatibleTimestamp()
-        }
+          'test.timestamp': formatPythonCompatibleTimestamp(),
+        },
       });
 
       // Create multiple spans to simulate a complex workflow
-      const researchtSpan = await this.client.startSpan('research-phase', {
+      const researchSpan = await this.client.startSpan('research-phase', {
         traceId: trace.traceId,
         attributes: {
           'agent.type': 'researcher',
-          'phase': 'research'
-        }
+          phase: 'research',
+        },
       });
 
-      researchtSpan.addEvent('research-started', {
-        'sources': ['web', 'papers', 'databases']
+      researchSpan.addEvent('research-started', {
+        sources: ['web', 'papers', 'databases'],
       });
 
       await new Promise(resolve => setTimeout(resolve, 30));
-      researchtSpan.setAttribute('documents.found', 15);
-      await researchtSpan.finish();
+      researchSpan.setAttribute('documents.found', 15);
+      await researchSpan.finish();
 
       const analysisSpan = await this.client.startSpan('analysis-phase', {
         traceId: trace.traceId,
         attributes: {
           'agent.type': 'analyst',
-          'phase': 'analysis'
-        }
+          phase: 'analysis',
+        },
       });
 
       analysisSpan.addEvent('analysis-started', {
-        'input.source': 'research-phase'
+        'input.source': 'research-phase',
       });
 
       await new Promise(resolve => setTimeout(resolve, 40));
@@ -247,7 +247,7 @@ class IntegrationTestSuite {
 
       trace.addEvent('workflow-completed', {
         'phases.completed': 2,
-        'total.duration.ms': 70
+        'total.duration.ms': 70,
       });
 
       await trace.finish();
@@ -266,15 +266,15 @@ class IntegrationTestSuite {
           'test.type': 'integration',
           'test.suite': 'api-integration',
           'test.method': 'error-handling',
-          'test.timestamp': formatPythonCompatibleTimestamp()
-        }
+          'test.timestamp': formatPythonCompatibleTimestamp(),
+        },
       });
 
       const span = await this.client.startSpan('error-simulation', {
         traceId: trace.traceId,
         attributes: {
-          'operation': 'simulate-error'
-        }
+          operation: 'simulate-error',
+        },
       });
 
       try {
@@ -301,10 +301,10 @@ class IntegrationTestSuite {
       const trace = await this.client.createTrace('integration-test-large', {
         attributes: {
           'test.type': 'integration',
-          'test.suite': 'api-integration', 
+          'test.suite': 'api-integration',
           'test.method': 'large-trace',
-          'test.timestamp': formatPythonCompatibleTimestamp()
-        }
+          'test.timestamp': formatPythonCompatibleTimestamp(),
+        },
       });
 
       // Add many events to test payload size limits
@@ -312,7 +312,7 @@ class IntegrationTestSuite {
         trace.addEvent(`event-${i}`, {
           'event.index': i,
           'event.data': `This is event number ${i} with some additional data`,
-          'timestamp': formatPythonCompatibleTimestamp()
+          timestamp: formatPythonCompatibleTimestamp(),
         });
       }
 
@@ -343,18 +343,18 @@ class IntegrationTestSuite {
               'test.suite': 'api-integration',
               'test.method': 'concurrent-traces',
               'test.concurrent.index': i,
-              'test.timestamp': formatPythonCompatibleTimestamp()
-            }
+              'test.timestamp': formatPythonCompatibleTimestamp(),
+            },
           });
 
           trace.addEvent('concurrent-start', {
-            'thread.id': i
+            'thread.id': i,
           });
 
-          await new Promise(resolve => setTimeout(resolve, 20 + (i * 10)));
+          await new Promise(resolve => setTimeout(resolve, 20 + i * 10));
 
           trace.addEvent('concurrent-end', {
-            'thread.id': i
+            'thread.id': i,
           });
 
           await trace.finish();
@@ -380,7 +380,7 @@ class IntegrationTestSuite {
         environment: ENVIRONMENT,
         endpoint: ENDPOINT,
         debug: true,
-        enabled: true
+        enabled: true,
       });
 
       const trace = await invalidClient.createTrace('integration-test-auth-fail', {
@@ -388,8 +388,8 @@ class IntegrationTestSuite {
           'test.type': 'integration',
           'test.suite': 'api-integration',
           'test.method': 'auth-failure',
-          'test.timestamp': formatPythonCompatibleTimestamp()
-        }
+          'test.timestamp': formatPythonCompatibleTimestamp(),
+        },
       });
 
       await trace.finish();
@@ -413,7 +413,7 @@ class IntegrationTestSuite {
 
   private printSummary(): void {
     console.log('\n📊 Integration Test Results');
-    console.log('=' .repeat(50));
+    console.log('='.repeat(50));
 
     const successful = this.results.filter(r => r.success).length;
     const failed = this.results.filter(r => !r.success).length;
@@ -461,7 +461,7 @@ class IntegrationTestSuite {
 // Run the tests
 async function runIntegrationTests() {
   const suite = new IntegrationTestSuite();
-  
+
   try {
     await suite.runAllTests();
   } catch (error) {

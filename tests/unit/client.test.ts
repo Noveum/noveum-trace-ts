@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { NoveumClient, initializeClient, getGlobalClient, resetGlobalClient } from '../src/core/client.js';
-import type { NoveumClientOptions } from '../src/core/types.js';
+import { NoveumClient, initializeClient, getGlobalClient, resetGlobalClient } from '../../src/core/client.js';
+import type { NoveumClientOptions } from '../../src/core/types.js';
 
 describe('NoveumClient', () => {
   let client: NoveumClient;

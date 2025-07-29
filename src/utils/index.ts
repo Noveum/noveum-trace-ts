@@ -294,8 +294,15 @@ export function isBrowser(): boolean {
  * Get SDK version from package.json
  */
 export function getSdkVersion(): string {
-  // This will be replaced during build process
-  return '0.1.0';
+  // Import version dynamically from package.json
+  try {
+    // Using require for dynamic import to avoid build issues
+    const pkg = require('../../package.json');
+    return pkg.version;
+  } catch {
+    // Fallback for edge cases where package.json is not accessible
+    return '1.0.0';
+  }
 }
 
 /**

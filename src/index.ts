@@ -208,6 +208,12 @@ export async function traceFunction<T>(
   const trace = await getDefaultClient().createTrace(name, options);
   try {
     return await fn();
+  } catch (error) {
+    trace.addEvent('error', {
+      'error.type': error instanceof Error ? error.constructor.name : 'Error',
+      'error.message': error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   } finally {
     await trace.finish();
   }
@@ -224,6 +230,12 @@ export async function spanFunction<T>(
   const span = await getDefaultClient().startSpan(name, options);
   try {
     return await fn();
+  } catch (error) {
+    span.addEvent('error', {
+      'error.type': error instanceof Error ? error.constructor.name : 'Error',
+      'error.message': error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   } finally {
     await span.finish();
   }

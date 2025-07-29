@@ -3,6 +3,7 @@
  */
 
 // Note: Express types are optional - this integration will work when Express is installed
+// Using any for Express framework types to avoid requiring @types/express dependency
 type Request = any;
 type Response = any;
 type NextFunction = any;
@@ -25,7 +26,7 @@ export interface TracedRequest {
     path: string;
   };
   headers: Record<string, string | string[] | undefined>;
-  body?: any;
+  body?: unknown; // Improved from any
   ip: string;
   connection: {
     remoteAddress?: string;
@@ -34,7 +35,7 @@ export interface TracedRequest {
     remoteAddress?: string;
   };
   get: (name: string) => string | undefined;
-  on: (event: string, listener: (...args: any[]) => void) => void;
+  on: (event: string, listener: (...args: unknown[]) => void) => void; // Improved from any[]
   trace?: {
     span: ISpan;
     traceId: string;
@@ -86,7 +87,7 @@ export function noveumMiddleware(
   } = options;
 
   if (!enabled) {
-    return (_req: any, _res: any, next: any) => next();
+    return (_req: unknown, _res: unknown, next: NextFunction) => next();
   }
 
   const ignoreSet = new Set(ignoreRoutes);
@@ -161,42 +162,45 @@ export function noveumMiddleware(
         if (responseIntercepted) return originalSend.call(this, body);
         responseIntercepted = true;
 
-        span.setAttributes({
-          'http.status_code': res.statusCode,
-          'http.status_text': res.statusMessage || '',
-        });
-
-        // Set span status based on HTTP status
-        if (res.statusCode >= 400) {
-          span.setStatus(SpanStatus.ERROR, `HTTP ${res.statusCode}`);
-        } else {
-          span.setStatus(SpanStatus.OK);
-        }
-
-        // Capture response headers if enabled
-        if (captureHeaders) {
-          const responseHeaders: Record<string, string> = {};
-          Object.entries(res.getHeaders()).forEach(([key, value]) => {
-            if (typeof value === 'string') {
-              responseHeaders[`http.response.header.${key}`] = value;
-            } else if (typeof value === 'number') {
-              responseHeaders[`http.response.header.${key}`] = String(value);
-            }
+        // Only set attributes if span is not finished
+        if (!span.isFinished) {
+          span.setAttributes({
+            'http.status_code': res.statusCode,
+            'http.status_text': res.statusMessage || '',
           });
-          span.setAttributes(responseHeaders);
-        }
 
-        // Capture response body if enabled and small enough
-        if (captureBody && body && res.statusCode < 400) {
-          try {
-            const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
-            if (bodyStr.length <= 1000) {
-              span.setAttribute('http.response.body', bodyStr);
-            } else {
-              span.setAttribute('http.response.body_size', bodyStr.length);
+          // Set span status based on HTTP status
+          if (res.statusCode >= 400) {
+            span.setStatus(SpanStatus.ERROR, `HTTP ${res.statusCode}`);
+          } else {
+            span.setStatus(SpanStatus.OK);
+          }
+
+          // Capture response headers if enabled
+          if (captureHeaders) {
+            const responseHeaders: Record<string, string> = {};
+            Object.entries(res.getHeaders()).forEach(([key, value]) => {
+              if (typeof value === 'string') {
+                responseHeaders[`http.response.header.${key}`] = value;
+              } else if (typeof value === 'number') {
+                responseHeaders[`http.response.header.${key}`] = String(value);
+              }
+            });
+            span.setAttributes(responseHeaders);
+          }
+
+          // Capture response body if enabled and small enough
+          if (captureBody && body && res.statusCode < 400) {
+            try {
+              const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+              if (bodyStr.length <= 1000) {
+                span.setAttribute('http.response.body', bodyStr);
+              } else {
+                span.setAttribute('http.response.body_size', bodyStr.length);
+              }
+            } catch {
+              span.setAttribute('http.response.body_error', 'Failed to serialize body');
             }
-          } catch {
-            span.setAttribute('http.response.body_error', 'Failed to serialize body');
           }
         }
 
@@ -205,7 +209,7 @@ export function noveumMiddleware(
 
       // Handle connection close/error
       req.on('close', () => {
-        if (!responseIntercepted) {
+        if (!responseIntercepted && !span.isFinished) {
           span.addEvent('request.aborted');
           span.setStatus(SpanStatus.ERROR, 'Request aborted');
           span.finish().catch(error => onError(error, req));
@@ -231,7 +235,7 @@ export function noveumErrorMiddleware(
 ): any {
   const { onError = defaultOnError } = options;
 
-  return (error: any, req: TracedRequest, _res: Response, next: NextFunction) => {
+  return (error: unknown, req: TracedRequest, _res: Response, next: NextFunction) => {
     const span = req.trace?.span;
 
     if (span && !span.isFinished) {

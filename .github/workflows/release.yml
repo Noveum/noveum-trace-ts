@@ -44,14 +44,14 @@ jobs:
         run: |
           npm run lint
           npm run typecheck
-          npm test -- --coverage
+          NODE_ENV=test npm test -- --coverage
           npm run build
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: Noveum/noveum-trace-ts
+          slug: Noveum/noveum-trace-typescript
           files: ./coverage/lcov.info
           flags: release-validation
           name: codecov-release

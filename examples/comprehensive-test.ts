@@ -296,6 +296,7 @@ async function testErrorHandling() {
     @trace('resilient-operation')
     async resilientOperation(): Promise<{ attempts: number; success: boolean }> {
       let attempts = 0;
+      let lastError: Error | null = null;
       
       while (attempts < 3) {
         attempts++;
@@ -304,14 +305,16 @@ async function testErrorHandling() {
           await this.unreliableStep(attempts);
           return { attempts, success: true };
         } catch (error) {
+          lastError = error as Error;
           console.log(`Attempt ${attempts} failed:`, error.message);
           if (attempts === 3) {
-            throw error;
+            throw lastError;
           }
         }
       }
       
-      return { attempts, success: false };
+      // This line is unreachable, but kept for TypeScript
+      throw lastError || new Error('All attempts failed');
     }
     
     @span('unreliable-step')
@@ -424,6 +427,13 @@ async function testBatchProcessing() {
     batchSize: 5,
     flushInterval: 1000
   });
+  
+  // Verify configuration
+  const config = client.getConfig();
+  if (config.batchSize !== 5 || config.flushInterval !== 1000) {
+    throw new Error('Batch configuration not applied correctly');
+  }
+  console.log('✓ Batch configuration verified: batchSize=5, flushInterval=1000ms');
   
   // Create multiple spans quickly to test batching
   const spans = [];

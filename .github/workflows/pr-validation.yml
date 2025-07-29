@@ -155,7 +155,7 @@ jobs:
 
       - name: Run base coverage
         run: |
-          npm test -- --coverage --reporter=json > base-coverage.json 2>/dev/null || echo "Base coverage failed"
+          NODE_ENV=test npm test -- --coverage --reporter=json > base-coverage.json 2>/dev/null || echo "Base coverage failed"
 
       - name: Checkout PR
         uses: actions/checkout@v4
@@ -167,13 +167,13 @@ jobs:
 
       - name: Run PR coverage
         run: |
-          npm test -- --coverage --reporter=json > pr-coverage.json 2>/dev/null || echo "PR coverage failed"
+          NODE_ENV=test npm test -- --coverage --reporter=json > pr-coverage.json 2>/dev/null || echo "PR coverage failed"
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: Noveum/noveum-trace-ts
+          slug: Noveum/noveum-trace-typescript
           files: ./coverage/lcov.info
           flags: pr-validation
           name: codecov-pr
@@ -190,7 +190,7 @@ jobs:
             COVERAGE_DATA=$(awk -F: '/^SF:/ {files++} /^DA:/ {split($2,a,","); total++; if(a[2]>0) covered++} END {if(total>0) printf "%.1f", (covered/total)*100; else print "0"}' coverage/lcov.info)
             echo "Current coverage: ${COVERAGE_DATA}%"
             
-            if (( $(echo "$COVERAGE_DATA < 70" | bc -l) )); then
+            if [ "${COVERAGE_DATA%.*}" -lt 70 ]; then
               echo "⚠️ Coverage is below 70%. Consider adding more tests."
             else
               echo "✅ Good test coverage!"

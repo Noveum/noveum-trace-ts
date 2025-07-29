@@ -65,14 +65,14 @@ jobs:
         run: npm ci
 
       - name: Run unit tests
-        run: npm test -- --coverage
+        run: NODE_ENV=test npm test -- --coverage
 
       - name: Upload coverage reports to Codecov
         if: matrix.node-version == 20
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: Noveum/noveum-trace-ts
+          slug: Noveum/noveum-trace-typescript
           files: ./coverage/lcov.info
           flags: unittests
           name: codecov-umbrella

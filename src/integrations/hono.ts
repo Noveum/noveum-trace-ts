@@ -182,8 +182,8 @@ export function noveumTrace(
           onError(error as Error, c as TracedContext);
         }
 
-        // Don't re-throw error in middleware - let it be handled by the framework
-        // throw error;
+        // Re-throw error to let the framework handle it properly
+        throw error;
       }
     } catch (error) {
       onError(error instanceof Error ? error : new Error(String(error)), c);

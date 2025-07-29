@@ -1,6 +1,6 @@
 {
   "name": "@noveum/trace",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "TypeScript SDK for tracing LLM, RAG, and agent applications with Noveum",
   "keywords": [
     "tracing",
@@ -76,11 +76,11 @@
     "release:patch": "standard-version --release-as patch",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
-    "test:health": "npx tsx tests/integration/run-integration-tests.ts health",
-    "test:integration": "npx tsx tests/integration/run-integration-tests.ts",
-    "test:integration:api": "npx tsx tests/integration/api-integration.test.ts",
-    "test:integration:framework": "npx tsx tests/integration/framework-integration.test.ts",
-    "test:smoke": "npx tsx tests/integration/run-integration-tests.ts smoke",
+    "test:health": "NODE_ENV=test npx tsx tests/integration/run-integration-tests.ts health",
+    "test:integration": "NODE_ENV=test npx tsx tests/integration/run-integration-tests.ts",
+    "test:integration:api": "NODE_ENV=test npx tsx tests/integration/api-integration.test.ts",
+    "test:integration:framework": "NODE_ENV=test npx tsx tests/integration/framework-integration.test.ts",
+    "test:smoke": "NODE_ENV=test npx tsx tests/integration/run-integration-tests.ts smoke",
     "test:ui": "vitest --ui",
     "test:watch": "vitest --watch",
     "typecheck": "tsc --noEmit"
@@ -132,6 +132,7 @@
     "sort-package-json": "^2.12.0",
     "standard-version": "^9.5.0",
     "tsup": "^8.3.5",
+    "tsx": "^4.7.0",
     "typedoc": "^0.27.4",
     "typescript": "^5.7.2",
     "vitest": "^3.2.4"

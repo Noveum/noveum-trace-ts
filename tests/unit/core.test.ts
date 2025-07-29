@@ -3,9 +3,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { NoveumClient } from '../src/core/client.js';
-import { MockTransport } from '../src/transport/http-transport.js';
-import { SpanStatus, TraceLevel } from '../src/core/types.js';
+import { NoveumClient } from '../../src/core/client.js';
+import { MockTransport } from '../../src/transport/http-transport.js';
+import { SpanStatus, TraceLevel } from '../../src/core/types.js';
 
 describe('NoveumClient', () => {
   let client: NoveumClient;

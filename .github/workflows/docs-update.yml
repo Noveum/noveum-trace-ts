@@ -41,8 +41,8 @@ jobs:
 
           # Count files and lines
           SRC_FILES=$(find src -name '*.ts' | wc -l)
-          TEST_FILES=$(find . -name '*.test.ts' -o -name '*.spec.ts' | wc -l)
-          INTEGRATION_FILES=$(find tests -name '*.ts' 2>/dev/null | wc -l || echo 0)
+          TEST_FILES=$(find tests/unit -name '*.test.ts' -o -name '*.spec.ts' 2>/dev/null | wc -l || echo 0)
+          INTEGRATION_FILES=$(find tests/integration -name '*.ts' 2>/dev/null | wc -l || echo 0)
 
           SRC_LINES=$(find src -name '*.ts' -exec wc -l {} + | tail -1 | awk '{print $1}')
 

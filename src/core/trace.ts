@@ -11,7 +11,12 @@ import type {
   SerializedTrace,
 } from './types.js';
 import { TraceLevel, SpanStatus } from './types.js';
-import { generateTraceId, sanitizeAttributes, getCurrentTimestamp } from '../utils/index.js';
+import {
+  generateTraceId,
+  sanitizeAttributes,
+  getCurrentTimestamp,
+  getSdkVersion,
+} from '../utils/index.js';
 import { Span } from './span.js';
 
 /**
@@ -117,7 +122,10 @@ export class Trace implements ITrace {
 
   setAttributes(attributes: Attributes): void {
     if (this._isFinished) {
-      console.warn('Cannot set attributes on a finished trace');
+      // Only warn in non-test environments to avoid noise during testing
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('Cannot set attributes on a finished trace');
+      }
       return;
     }
 
@@ -127,7 +135,10 @@ export class Trace implements ITrace {
 
   setAttribute(key: string, value: Attributes[string]): void {
     if (this._isFinished) {
-      console.warn('Cannot set attribute on a finished trace');
+      // Only warn in non-test environments to avoid noise during testing
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('Cannot set attribute on a finished trace');
+      }
       return;
     }
 
@@ -321,7 +332,7 @@ export class Trace implements ITrace {
         project: 'default', // This should come from client configuration
         environment: 'development', // This should come from client configuration
         timestamp: getCurrentTimestamp(),
-        sdkVersion: '0.1.0', // This should come from package.json
+        sdkVersion: getSdkVersion(),
       },
     };
 

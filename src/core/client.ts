@@ -8,7 +8,7 @@ import { StandaloneSpan as Span } from './span-standalone.js';
 import { HttpTransport } from '../transport/http-transport.js';
 import { getGlobalContextManager } from '../context/context-manager.js';
 import { Sampler } from './sampler.js';
-import { generateSpanId } from '../utils/index.js';
+import { generateSpanId, getSdkVersion } from '../utils/index.js';
 
 /**
  * Default client configuration
@@ -220,6 +220,12 @@ export class NoveumClient {
     try {
       const result = await fn();
       return result;
+    } catch (error) {
+      trace.addEvent('error', {
+        'error.type': error instanceof Error ? error.constructor.name : 'Error',
+        'error.message': error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     } finally {
       await trace.finish();
     }
@@ -233,6 +239,12 @@ export class NoveumClient {
     try {
       const result = await fn();
       return result;
+    } catch (error) {
+      span.addEvent('error', {
+        'error.type': error instanceof Error ? error.constructor.name : 'Error',
+        'error.message': error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     } finally {
       await span.finish();
     }
@@ -321,7 +333,7 @@ export class NoveumClient {
         project: this._config.project,
         environment: this._config.environment,
         timestamp: new Date().toISOString(),
-        sdkVersion: '0.1.0',
+        sdkVersion: getSdkVersion(),
       },
     };
 

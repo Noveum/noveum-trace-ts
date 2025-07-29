@@ -92,7 +92,10 @@ export class Span implements ISpan {
 
   setAttributes(attributes: Attributes): void {
     if (this._isFinished) {
-      console.warn('Cannot set attributes on a finished span');
+      // Only warn in non-test environments to avoid noise during testing
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('Cannot set attributes on a finished span');
+      }
       return;
     }
 
@@ -102,7 +105,10 @@ export class Span implements ISpan {
 
   setAttribute(key: string, value: Attributes[string]): void {
     if (this._isFinished) {
-      console.warn('Cannot set attribute on a finished span');
+      // Only warn in non-test environments to avoid noise during testing
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('Cannot set attribute on a finished span');
+      }
       return;
     }
 

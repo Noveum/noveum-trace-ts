@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { trace, span, timed, setGlobalClient } from '../src/decorators/index.js';
-import { NoveumClient } from '../src/core/client.js';
-import type { NoveumClientOptions } from '../src/core/types.js';
+import { trace, span, timed, setGlobalClient } from '../../src/decorators/index.js';
+import { NoveumClient } from '../../src/core/client.js';
+import type { NoveumClientOptions } from '../../src/core/types.js';
 
 describe('Decorators', () => {
   let client: NoveumClient;

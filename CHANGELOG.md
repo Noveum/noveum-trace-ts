@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2025-07-28
+
+### 💥 BREAKING CHANGES
+
+#### Sampler Interface Changes
+
+- **`Sampler.shouldSample` parameter order changed** from `(name, traceId)` to `(traceId, name)`
+  - **Previous signature**: `shouldSample(name: string, traceId: string): boolean`
+  - **New signature**: `shouldSample(traceId: string, name?: string): boolean`
+  - **Migration**: If you have custom sampler implementations, update your `shouldSample` method to use the new parameter order
+  - **Rationale**: Improved consistency across the SDK where `traceId` is typically the first parameter
+
+#### Migration Guide for Custom Samplers
+
+If you have implemented a custom sampler, update your code as follows:
+
+```typescript
+// ❌ Before (v0.x)
+class CustomSampler implements ISampler {
+  shouldSample(name: string, traceId: string): boolean {
+    // Your custom logic here
+    return Math.random() < 0.5;
+  }
+}
+
+// ✅ After (v1.x)
+class CustomSampler implements ISampler {
+  shouldSample(traceId: string, name?: string): boolean {
+    // Your custom logic here
+    return Math.random() < 0.5;
+  }
+}
+```
+
+### 🔧 Other Improvements
+
+- Enhanced async safety with re-enabled TypeScript rules (`@typescript-eslint/no-floating-promises`, `@typescript-eslint/await-thenable`)
+- Improved error handling type safety across integration tests
+- Updated ESLint configuration to use predefined globals for better maintainability
+- Fixed Codecov action parameters across all GitHub Actions workflows
+- Enhanced security for API key logging with configurable hiding options
+
 ## [0.0.1] - 2025-07-28
 
 ### 🎉 Initial Release
