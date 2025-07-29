@@ -207,23 +207,19 @@ jobs:
             echo "ℹ️ No changes needed for CLAUDE.md"
           fi
 
-      - name: Commit updated CLAUDE.md
+      # Removed auto-commit functionality to prevent permission issues
+      # The statistics are generated and validated, but not automatically committed
+      - name: Report statistics update
         if: steps.changes.outputs.changes == 'true'
         run: |
-          set -euo pipefail
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CLAUDE.md
-          git commit -m "docs: update CLAUDE.md with latest project statistics
-
-          - Package: ${{ steps.stats.outputs.name }}@${{ steps.stats.outputs.version }}
-          - Source files: ${{ steps.stats.outputs.src_files }}
-          - Lines of code: ${{ steps.stats.outputs.src_lines }}
-          - Exports: ${{ steps.stats.outputs.exports }}
-
-          [skip ci]"
-          git push
+          echo "📊 Project Statistics Updated:"
+          echo "- Package: ${{ steps.stats.outputs.name }}@${{ steps.stats.outputs.version }}"
+          echo "- Source files: ${{ steps.stats.outputs.src_files }}"
+          echo "- Lines of code: ${{ steps.stats.outputs.src_lines }}"
+          echo "- Exports: ${{ steps.stats.outputs.exports }}"
+          echo ""
+          echo "ℹ️ CLAUDE.md has been updated with current statistics"
+          echo "   Manual commit required if changes should be persisted"
 
   # Job 2: Generate API documentation
   generate-api-docs:
