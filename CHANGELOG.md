@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.0.2](https://github.com/Noveum/noveum-trace-typescript/compare/v1.0.1...v1.0.2) (2025-07-29)
+
+### 🐛 Bug Fixes
+
+- add missing 'Important Implementation Details' section to CLAUDE.md ([8719f4b](https://github.com/Noveum/noveum-trace-typescript/commit/8719f4bc3394502f0d8938bbf2d786fcfb7d4bf5))
+- fix documentation build ([15fa10c](https://github.com/Noveum/noveum-trace-typescript/commit/15fa10cb04ee3a1d79ec4a9739a095a177c80a25))
+
 ### 1.0.1 (2025-07-29)
 
 ### 🐛 Bug Fixes
