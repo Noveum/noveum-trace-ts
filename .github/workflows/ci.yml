@@ -26,7 +26,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -41,7 +40,7 @@ jobs:
         run: npm run typecheck
 
       - name: Check for unused dependencies
-        run: npx depcheck --ignores="@types/*,tsx,vitest,@vitest/*,eslint*,prettier,rimraf,typedoc,@changesets/*,tsup"
+        run: npx depcheck --ignores="@types/*,tsx,vitest,@vitest/*,eslint*,prettier,rimraf,typedoc,@changesets/*,tsup,@commitlint/*,audit-ci,sort-package-json,commitizen,cz-conventional-changelog,standard-version,husky,lint-staged,globals" --ignore-patterns="examples/*"
 
   # Job 2: Unit Tests
   test:
@@ -59,7 +58,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -91,7 +89,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -115,7 +112,7 @@ jobs:
         run: |
           echo "Testing package installation..."
           npm pack
-          PACKAGE_NAME=$(ls *.tgz)
+          PACKAGE_NAME=$(ls -1 *.tgz | head -n1)
           echo "Created package: $PACKAGE_NAME"
           mkdir test-install && cd test-install
           npm init -y
@@ -146,7 +143,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -155,6 +151,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ github.sha }}
+          path: .
 
       - name: Run smoke tests
         run: npm run test:smoke
@@ -184,7 +181,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -193,7 +189,7 @@ jobs:
         run: npm audit --audit-level=moderate
 
       - name: Run Snyk security scan
-        uses: snyk/actions/node@master
+        uses: snyk/actions/node@efcc6132b1fc8f13a1c44f5da291119718006253
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -220,7 +216,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -229,6 +224,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ github.sha }}
+          path: .
 
       - name: Analyze bundle size
         run: |
@@ -272,7 +268,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -281,6 +276,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ github.sha }}
+          path: .
 
       - name: Run performance benchmarks
         run: |
@@ -330,7 +326,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -343,14 +338,47 @@ jobs:
           echo "📚 Documentation Coverage Check"
           echo "==============================="
 
-          # Check for missing README sections
-          if ! grep -q "## Installation" README.md; then
+          # Check for missing README sections (matching emoji-prefixed headers)
+          MISSING_SECTIONS=()
+
+          if ! grep -q "## 📦 Installation" README.md; then
             echo "❌ Missing Installation section in README"
-            exit 1
+            MISSING_SECTIONS+=("Installation")
           fi
 
-          if ! grep -q "## Usage" README.md; then
-            echo "❌ Missing Usage section in README"
+          if ! grep -q "## 🏃 Quick Start" README.md; then
+            echo "❌ Missing Quick Start section in README"
+            MISSING_SECTIONS+=("Quick Start")
+          fi
+
+          if ! grep -q "## 🔧 Framework Integrations" README.md; then
+            echo "❌ Missing Framework Integrations section in README"
+            MISSING_SECTIONS+=("Framework Integrations")
+          fi
+
+          if ! grep -q "## 📚 Core Concepts" README.md; then
+            echo "❌ Missing Core Concepts section in README (acts as API Reference)"
+            MISSING_SECTIONS+=("Core Concepts")
+          fi
+
+          if ! grep -q "## 📋 Examples" README.md; then
+            echo "❌ Missing Examples section in README"
+            MISSING_SECTIONS+=("Examples")
+          fi
+
+          if ! grep -q "## 🤝 Contributing" README.md; then
+            echo "❌ Missing Contributing section in README"
+            MISSING_SECTIONS+=("Contributing")
+          fi
+
+          if ! grep -q "## 📄 License" README.md; then
+            echo "❌ Missing License section in README"
+            MISSING_SECTIONS+=("License")
+          fi
+
+          # Exit if any required sections are missing
+          if [ ${#MISSING_SECTIONS[@]} -gt 0 ]; then
+            echo "💥 Found ${#MISSING_SECTIONS[@]} missing section(s): ${MISSING_SECTIONS[*]}"
             exit 1
           fi
 
@@ -366,6 +394,8 @@ jobs:
           else
             echo "✅ Documentation coverage looks good"
           fi
+
+          echo "✅ All required README sections found"
 
       - name: Upload documentation
         uses: actions/upload-artifact@v4

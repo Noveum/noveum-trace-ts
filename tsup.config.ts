@@ -8,6 +8,10 @@ export default defineConfig({
     'integrations/hono': 'src/integrations/hono.ts',
   },
   format: ['cjs', 'esm'],
+  define: {
+    // Injects the version string from package.json at build time
+    __SDK_VERSION__: JSON.stringify(require('./package.json').version),
+  },
   dts: true, // Declaration generation restored ✅
   sourcemap: true,
   clean: true,

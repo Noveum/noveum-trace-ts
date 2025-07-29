@@ -291,18 +291,11 @@ export function isBrowser(): boolean {
 }
 
 /**
- * Get SDK version from package.json
+ * Get SDK version from build-time injected constant
  */
 export function getSdkVersion(): string {
-  // Import version dynamically from package.json
-  try {
-    // Using require for dynamic import to avoid build issues
-    const pkg = require('../../package.json');
-    return pkg.version;
-  } catch {
-    // Fallback for edge cases where package.json is not accessible
-    return '1.0.0';
-  }
+  // Provided at build time by tsup; fallback to '1.0.0' if undefined
+  return typeof __SDK_VERSION__ !== 'undefined' ? __SDK_VERSION__ : '1.0.0';
 }
 
 /**

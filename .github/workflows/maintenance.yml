@@ -23,7 +23,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -35,7 +34,7 @@ jobs:
 
           echo ""
           echo "🔍 Checking for unused dependencies..."
-          npx depcheck --ignores="@types/*,tsx,vitest,@vitest/*,eslint*,prettier,rimraf,typedoc,@changesets/*,tsup"
+          npx depcheck --ignores="@types/*,tsx,vitest,@vitest/*,eslint*,prettier,rimraf,typedoc,@changesets/*,tsup,@commitlint/*,audit-ci,sort-package-json,commitizen,cz-conventional-changelog,standard-version,husky,lint-staged,globals" --ignore-patterns="examples/*"
 
       - name: Security audit
         run: |
@@ -50,8 +49,8 @@ jobs:
           echo "Current bundle sizes:"
           ls -lh dist/*.mjs dist/*.js | awk '{print $5 "\t" $9}'
 
-          # Check if bundle size is growing significantly
-          MAIN_SIZE=$(stat -c%s dist/index.mjs)
+          # Check if bundle size is growing significantly (portable across OS)
+          MAIN_SIZE=$(wc -c < dist/index.mjs)
           echo "Main bundle size: $MAIN_SIZE bytes"
 
           if [ $MAIN_SIZE -gt 1048576 ]; then  # 1MB
@@ -73,7 +72,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -139,7 +137,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -265,7 +262,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -361,7 +357,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci

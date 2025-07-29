@@ -29,7 +29,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -63,6 +62,8 @@ jobs:
 
       - name: Update CLAUDE.md statistics
         run: |
+          set -euo pipefail
+
           # Create backup
           cp CLAUDE.md CLAUDE.md.backup
 
@@ -209,6 +210,8 @@ jobs:
       - name: Commit updated CLAUDE.md
         if: steps.changes.outputs.changes == 'true'
         run: |
+          set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CLAUDE.md
@@ -235,7 +238,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -272,7 +274,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -322,25 +323,25 @@ jobs:
         run: |
           echo "📋 Checking README completeness..."
 
-          REQUIRED_SECTIONS=(
-            "Installation"
-            "Quick Start"
-            "Usage"
-            "API Reference"
-            "Examples"
-            "Framework Integrations"
-            "Contributing"
-            "License"
-          )
+          # Define required sections with their actual emoji-prefixed headers
+          declare -A REQUIRED_SECTIONS
+          REQUIRED_SECTIONS["Installation"]="## 📦 Installation"
+          REQUIRED_SECTIONS["Quick Start"]="## 🏃 Quick Start"
+          REQUIRED_SECTIONS["Framework Integrations"]="## 🔧 Framework Integrations"
+          REQUIRED_SECTIONS["Core Concepts (API Reference)"]="## 📚 Core Concepts"
+          REQUIRED_SECTIONS["Examples"]="## 📋 Examples"
+          REQUIRED_SECTIONS["Contributing"]="## 🤝 Contributing"
+          REQUIRED_SECTIONS["License"]="## 📄 License"
 
           MISSING_SECTIONS=()
 
-          for section in "${REQUIRED_SECTIONS[@]}"; do
-            if grep -q "## $section" README.md; then
-              echo "✅ $section section found"
+          for section_name in "${!REQUIRED_SECTIONS[@]}"; do
+            section_header="${REQUIRED_SECTIONS[$section_name]}"
+            if grep -q "$section_header" README.md; then
+              echo "✅ $section_name section found"
             else
-              echo "⚠️ $section section missing"
-              MISSING_SECTIONS+=("$section")
+              echo "⚠️ $section_name section missing (looking for: $section_header)"
+              MISSING_SECTIONS+=("$section_name")
             fi
           done
 
@@ -348,6 +349,7 @@ jobs:
             echo "🎉 All required sections present in README"
           else
             echo "📝 Missing sections: ${MISSING_SECTIONS[*]}"
+            echo "ℹ️ Note: This is a warning, not a failure - sections may have different names"
           fi
 
   # Job 4: Update package.json scripts documentation

@@ -17,11 +17,13 @@ jobs:
 
     steps:
       - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          echo "🔍 Validating PR title: '${{ github.event.pull_request.title }}'"
+          echo "🔍 Validating PR title: \"$PR_TITLE\""
 
           # Check if title follows conventional commit format
-          TITLE="${{ github.event.pull_request.title }}"
+          TITLE="$PR_TITLE"
 
           # Define valid prefixes
           VALID_PREFIXES=("feat" "fix" "docs" "style" "refactor" "test" "chore" "ci" "perf" "build")
@@ -47,10 +49,12 @@ jobs:
           fi
 
       - name: Validate PR description
+        env:
+          PR_DESCRIPTION: ${{ github.event.pull_request.body }}
         run: |
           echo "📝 Validating PR description..."
 
-          DESCRIPTION="${{ github.event.pull_request.body }}"
+          DESCRIPTION="$PR_DESCRIPTION"
 
           if [ -z "$DESCRIPTION" ] || [ ${#DESCRIPTION} -lt 20 ]; then
             echo "❌ PR description is too short or missing"
@@ -66,12 +70,12 @@ jobs:
           fi
 
       - name: Check PR size
+        env:
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+          ADDITIONS: ${{ github.event.pull_request.additions }}
+          DELETIONS: ${{ github.event.pull_request.deletions }}
         run: |
           echo "📊 Analyzing PR size..."
-
-          CHANGED_FILES="${{ github.event.pull_request.changed_files }}"
-          ADDITIONS="${{ github.event.pull_request.additions }}"
-          DELETIONS="${{ github.event.pull_request.deletions }}"
 
           echo "Files changed: $CHANGED_FILES"
           echo "Lines added: $ADDITIONS"
@@ -101,7 +105,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -148,7 +151,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -222,7 +224,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Check for breaking changes
         run: |
@@ -271,7 +272,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -281,8 +281,8 @@ jobs:
           echo "📦 Checking bundle size impact..."
           npm run build
 
-          # Check main bundle size
-          BUNDLE_SIZE=$(stat -c%s dist/index.mjs)
+          # Check main bundle size (portable across OS)
+          BUNDLE_SIZE=$(wc -c < dist/index.mjs)
           echo "Main bundle size: $BUNDLE_SIZE bytes"
 
           # Set reasonable limits
@@ -346,7 +346,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -386,65 +385,4 @@ jobs:
             echo "✅ No obvious sensitive data patterns found"
           else
             echo "⚠️ Please review the flagged items to ensure no sensitive data is exposed"
-          fi
-
-  # Final job: PR validation summary
-  pr-validation-summary:
-    name: PR Validation Summary
-    runs-on: ubuntu-latest
-    needs:
-      [
-        pr-metadata,
-        code-quality,
-        test-coverage,
-        breaking-changes,
-        performance-impact,
-        security-review,
-      ]
-    if: always() && github.event.pull_request.draft == false
-
-    steps:
-      - name: Generate validation summary
-        run: |
-          echo "📋 Pull Request Validation Summary"
-          echo "=================================="
-          echo "PR: #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}"
-          echo "Author: ${{ github.event.pull_request.user.login }}"
-          echo "Base: ${{ github.event.pull_request.base.ref }}"
-          echo "Head: ${{ github.event.pull_request.head.ref }}"
-          echo ""
-          echo "Validation Results:"
-          echo "-------------------"
-          echo "Metadata: ${{ needs.pr-metadata.result }}"
-          echo "Code Quality: ${{ needs.code-quality.result }}"
-          echo "Test Coverage: ${{ needs.test-coverage.result }}"
-          echo "Breaking Changes: ${{ needs.breaking-changes.result }}"
-          echo "Performance: ${{ needs.performance-impact.result }}"
-          echo "Security: ${{ needs.security-review.result }}"
-          echo ""
-
-          # Count successful validations
-          RESULTS=("${{ needs.pr-metadata.result }}" 
-                   "${{ needs.code-quality.result }}"
-                   "${{ needs.test-coverage.result }}"
-                   "${{ needs.breaking-changes.result }}"
-                   "${{ needs.performance-impact.result }}"
-                   "${{ needs.security-review.result }}")
-
-          SUCCESS_COUNT=0
-          for result in "${RESULTS[@]}"; do
-            if [ "$result" = "success" ]; then
-              ((SUCCESS_COUNT++))
-            fi
-          done
-
-          echo "Validation Score: $SUCCESS_COUNT/6 checks passed"
-
-          if [ $SUCCESS_COUNT -eq 6 ]; then
-            echo "🎉 All validations passed! This PR is ready for review."
-          elif [ $SUCCESS_COUNT -ge 4 ]; then
-            echo "✅ Most validations passed. Please address any remaining issues."
-          else
-            echo "❌ Multiple validations failed. Please fix the issues before requesting review."
-            exit 1
           fi

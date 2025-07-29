@@ -21,6 +21,7 @@ export default [
         ...globals.browser,
         NodeJS: 'readonly',
         RequestInit: 'readonly',
+        __SDK_VERSION__: 'readonly',
       },
     },
     plugins: {
@@ -67,6 +68,7 @@ export default [
         ...globals.browser,
         NodeJS: 'readonly',
         RequestInit: 'readonly',
+        __SDK_VERSION__: 'readonly',
       },
     },
     plugins: {

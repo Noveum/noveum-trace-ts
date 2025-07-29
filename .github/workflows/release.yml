@@ -35,7 +35,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -92,7 +91,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -106,7 +104,7 @@ jobs:
       - name: Test package installation
         run: |
           # Test installation in a clean environment
-          PACKAGE_FILE=$(ls *.tgz)
+          PACKAGE_FILE=$(ls -1 *.tgz | head -n1)
           echo "Testing package: $PACKAGE_FILE"
 
           mkdir test-install && cd test-install
@@ -144,7 +142,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -200,7 +197,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
@@ -210,11 +206,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: npm-package
+          path: .
 
       - name: Get package info
         id: package
         run: |
-          PACKAGE_FILE=$(ls *.tgz)
+          PACKAGE_FILE=$(ls -1 *.tgz | head -n1)
           PACKAGE_NAME=$(node -p "require('./package.json').name")
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
 
@@ -270,7 +267,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -279,6 +275,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: npm-package
+          path: .
 
       - name: Bump version
         id: version
@@ -320,6 +317,8 @@ jobs:
 
       - name: Commit version bump
         run: |
+          set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json
@@ -329,7 +328,7 @@ jobs:
       - name: Get package info
         id: package
         run: |
-          PACKAGE_FILE=$(ls *.tgz)
+          PACKAGE_FILE=$(ls -1 *.tgz | head -n1)
           echo "file=$PACKAGE_FILE" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
