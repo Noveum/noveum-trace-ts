@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Common Development Commands
 
 ### Building the project
+
 ```bash
 npm run build        # Build the project using tsup
 npm run build:watch  # Build in watch mode for development
@@ -12,6 +13,7 @@ npm run dev         # Alias for build:watch
 ```
 
 ### Running tests
+
 ```bash
 npm test                   # Run all tests using Vitest
 npm run test:watch        # Run tests in watch mode
@@ -27,6 +29,7 @@ npm run test:health           # Health check test
 ```
 
 ### Code quality and formatting
+
 ```bash
 npm run lint             # Run ESLint on source files
 npm run lint:fix        # Run ESLint and auto-fix issues
@@ -36,6 +39,7 @@ npm run typecheck       # Run TypeScript type checking
 ```
 
 ### CI/CD and automation
+
 The project includes comprehensive GitHub Actions workflows:
 
 - **CI/CD Pipeline** (`.github/workflows/ci.yml`) - Runs on push/PR to main/develop
@@ -48,42 +52,123 @@ The project includes comprehensive GitHub Actions workflows:
   - Documentation generation and validation
 
 - **Release Automation** (`.github/workflows/release.yml`) - Runs on releases
-  - Validates release readiness
-  - Builds and tests package
-  - Publishes to NPM
-  - Creates GitHub releases
-  - Post-release notifications
+  - Automated changelog generation
+  - GitHub release creation
+  - npm package publishing
+  - Docker image building and deployment
+  - Documentation deployment to GitHub Pages
 
-- **PR Validation** (`.github/workflows/pr-validation.yml`) - Runs on PRs
-  - Validates PR title/description format
-  - Code quality and test coverage analysis
-  - Breaking changes detection
-  - Performance impact assessment
-  - Security review
+- **Documentation Updates** (`.github/workflows/docs-update.yml`) - Runs on main branch changes
+  - Automatic CLAUDE.md statistics updates
+  - API documentation generation with TypeDoc
+  - Example validation and README completeness checks
+  - Scripts documentation synchronization
 
-- **Maintenance** (`.github/workflows/maintenance.yml`) - Weekly health checks
-  - Dependency health monitoring
-  - Code quality metrics
-  - Performance benchmarking
-  - Integration health checks
-  - Documentation completeness
+### Development tools
 
-- **Documentation Updates** (`.github/workflows/docs-update.yml`) - Auto-updates docs
-  - Updates CLAUDE.md statistics
-  - Generates API documentation
-  - Validates examples and README
-
-### Documentation and release
 ```bash
-npm run docs         # Generate typedoc documentation
-npm run clean        # Clean build artifacts (dist folder)
-npm run release      # Publish with changeset
-npm run version      # Version with changeset
+npm run docs           # Generate TypeDoc documentation
+npm run clean          # Clean build outputs and dependencies
+npm run commit         # Interactive commit using Commitizen
+npm run prepare        # Install Git hooks (runs automatically)
+
+# Release commands
+npm run release            # Create release with automatic version bump
+npm run release:dry        # Preview release changes
+npm run release:patch      # Force patch version release
+npm run release:minor      # Force minor version release
+npm run release:major      # Force major version release
 ```
+
+### Environment setup
+
+1. Copy `.env.example` to `.env` and configure:
+
+   ```bash
+   NOVEUM_API_KEY=your_api_key_here
+   NOVEUM_PROJECT=your_project_name
+   NOVEUM_ENVIRONMENT=development
+   ```
+
+2. Run integration tests to verify setup:
+   ```bash
+   npm run test:health
+   ```
+
+## Important Implementation Details
+
+### Core Architecture
+
+The Noveum Trace TypeScript SDK follows a modular architecture designed for performance, extensibility, and ease of use:
+
+#### Client Management (`src/core/client.ts`)
+
+- **NoveumClient**: Central client class managing configuration, HTTP transport, and lifecycle
+- **Configuration validation**: Comprehensive validation with sensible defaults
+- **Batch processing**: Intelligent batching with configurable size and flush intervals
+- **Error handling**: Robust retry logic with exponential backoff
+- **Resource management**: Automatic cleanup and graceful shutdown
+
+#### Tracing Core (`src/core/`)
+
+- **Trace Management**: Full trace lifecycle with attributes, events, and relationships
+- **Span Operations**: Comprehensive span creation, modification, and completion
+- **Context Propagation**: Advanced context management for span relationships
+- **Standalone Support**: Self-contained trace/span operations for edge cases
+
+#### Transport Layer (`src/transport/http-transport.ts`)
+
+- **HTTP Transport**: Robust HTTP client with retry logic and error handling
+- **Batch Serialization**: Efficient JSON serialization with timestamp compatibility
+- **Network Resilience**: Configurable timeouts, retries, and backoff strategies
+
+#### Integration Framework (`src/integrations/`)
+
+- **Express.js**: Complete middleware with request/response tracing
+- **Next.js**: App Router and Pages API support with automatic instrumentation
+- **Hono**: Modern framework integration with middleware and handler wrapping
+- **Framework Agnostic**: Manual tracing support for any TypeScript/JavaScript application
+
+#### Developer Experience (`src/decorators/`)
+
+- **TypeScript Decorators**: `@trace` and `@span` decorators for automatic instrumentation
+- **Function Wrappers**: `traceFunction()` and `spanFunction()` for inline tracing
+- **Type Safety**: Full TypeScript support with excellent IntelliSense
+- **Debug Support**: Comprehensive logging and error reporting
+
+### Key Design Decisions
+
+#### Performance Optimizations
+
+- **Async-First Design**: All operations are non-blocking with Promise-based APIs
+- **Lazy Serialization**: Data is only serialized when actually sending to reduce CPU overhead
+- **Memory Management**: Automatic cleanup of finished traces and spans to prevent memory leaks
+- **Batch Processing**: Intelligent batching reduces network calls and improves throughput
+
+#### Python SDK Compatibility
+
+- **API Parity**: 100% compatible API surface with the Python SDK
+- **Data Format**: Identical JSON output format for cross-language compatibility
+- **Timestamp Format**: Python-compatible microsecond precision timestamps (no Z suffix)
+- **Status Management**: Full status field support matching Python implementation
+
+#### Error Handling Strategy
+
+- **Graceful Degradation**: Tracing failures never affect application functionality
+- **Comprehensive Logging**: Detailed error information in debug mode
+- **Retry Logic**: Configurable retry attempts with exponential backoff
+- **Fallback Behavior**: Safe defaults when configuration or network issues occur
+
+#### Sampling and Performance
+
+- **Rate-Based Sampling**: Configurable sampling rates with per-trace-name rules
+- **Custom Samplers**: Extensible sampler interface for complex sampling logic
+- **Production Ready**: Minimal overhead suitable for high-throughput production environments
 
 ## High-level Architecture
 
 ### Core Concepts
+
 The SDK is built around three main concepts:
 
 1. **Client (`NoveumClient`)**: Main entry point that manages configuration, batching, and transport

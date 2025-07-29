@@ -3,7 +3,7 @@
 [![npm version](https://badge.fury.io/js/@noveum%2Ftrace.svg)](https://badge.fury.io/js/@noveum%2Ftrace)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Build Status](https://github.com/Noveum/noveum-trace-typescript/workflows/CI/badge.svg)](https://github.com/Noveum/noveum-trace-typescript/actions)
+[![Build Status](https://github.com/Noveum/noveum-trace-ts/workflows/CI/badge.svg)](https://github.com/Noveum/noveum-trace-ts/actions)
 
 The official TypeScript SDK for [Noveum.ai](https://noveum.ai) - a powerful tracing and observability platform for LLM applications, RAG systems, and AI agents.
 
@@ -52,10 +52,10 @@ const client = initializeClient({
 import { trace, span } from '@noveum/trace';
 
 // Trace a complete operation
-const result = await trace('user-query-processing', async (traceInstance) => {
+const result = await trace('user-query-processing', async traceInstance => {
   traceInstance.setAttribute('user.id', userId);
   traceInstance.setAttribute('query.type', 'search');
-  
+
   // Create spans for sub-operations
   const embeddings = await span('generate-embeddings', async () => {
     return await openai.embeddings.create({
@@ -63,11 +63,11 @@ const result = await trace('user-query-processing', async (traceInstance) => {
       input: userQuery,
     });
   });
-  
+
   const searchResults = await span('vector-search', async () => {
     return await vectorDB.search(embeddings.data[0].embedding);
   });
-  
+
   return searchResults;
 });
 ```
@@ -80,7 +80,7 @@ class LLMService {
   async generateResponse(prompt: string) {
     return await this.callOpenAI(prompt);
   }
-  
+
   @span('openai-api-call', { captureArgs: true, captureReturn: true })
   private async callOpenAI(prompt: string) {
     return await openai.chat.completions.create({
@@ -101,12 +101,14 @@ import { noveumMiddleware } from '@noveum/trace/integrations/express';
 
 const app = express();
 
-app.use(noveumMiddleware({
-  client,
-  captureRequest: true,
-  captureResponse: true,
-  ignoreRoutes: ['/health'],
-}));
+app.use(
+  noveumMiddleware({
+    client,
+    captureRequest: true,
+    captureResponse: true,
+    ignoreRoutes: ['/health'],
+  })
+);
 ```
 
 ### Next.js App Router
@@ -118,10 +120,10 @@ import { withNoveumTracing } from '@noveum/trace/integrations/nextjs';
 export const POST = withNoveumTracing(
   async (request: NextRequest) => {
     const { message } = await request.json();
-    
+
     // Your AI logic here
     const response = await processMessage(message);
-    
+
     return NextResponse.json(response);
   },
   {
@@ -142,11 +144,18 @@ const app = new Hono();
 
 app.use('*', noveumMiddleware({ client }));
 
-app.post('/chat', traced(async (c) => {
-  const { message } = await c.req.json();
-  const response = await processMessage(message);
-  return c.json(response);
-}, 'chat-endpoint', { client }));
+app.post(
+  '/chat',
+  traced(
+    async c => {
+      const { message } = await c.req.json();
+      const response = await processMessage(message);
+      return c.json(response);
+    },
+    'chat-endpoint',
+    { client }
+  )
+);
 ```
 
 ## 📚 Core Concepts
@@ -225,12 +234,12 @@ const client = initializeClient({
   apiKey: 'your-api-key',
   project: 'my-project',
   environment: 'production',
-  
+
   // Batching and performance
   batchSize: 100,
   flushInterval: 5000,
   timeout: 30000,
-  
+
   // Sampling
   sampling: {
     rate: 1.0, // Sample 100% of traces
@@ -245,11 +254,11 @@ const client = initializeClient({
       },
     ],
   },
-  
+
   // Retry configuration
   retryAttempts: 3,
   retryDelay: 1000,
-  
+
   // Debug mode
   debug: process.env.NODE_ENV === 'development',
 });
@@ -313,13 +322,13 @@ try {
 } catch (error) {
   span.setAttribute('operation.result', 'error');
   span.setStatus('ERROR', error.message);
-  
+
   span.addEvent('error', {
     'error.type': error.constructor.name,
     'error.message': error.message,
     'error.stack': error.stack,
   });
-  
+
   throw error;
 } finally {
   await span.finish();
@@ -332,9 +341,7 @@ try {
 - **📖 Documentation**: [https://docs.noveum.ai](https://docs.noveum.ai)
 - **🐍 Python SDK**: [https://github.com/Noveum/noveum-trace](https://github.com/Noveum/noveum-trace)
 - **💬 Discord Community**: [https://discord.gg/noveum](https://discord.gg/noveum)
-- **🐛 Issues**: [https://github.com/Noveum/noveum-trace-typescript/issues](https://github.com/Noveum/noveum-trace-typescript/issues)
-
-
+- **🐛 Issues**: [https://github.com/Noveum/noveum-trace-ts/issues](https://github.com/Noveum/noveum-trace-ts/issues)
 
 ## 📋 Examples
 
@@ -346,7 +353,7 @@ import OpenAI from 'openai';
 
 class ChatService {
   private openai = new OpenAI();
-  
+
   @trace('chat-completion')
   async processMessage(message: string, userId: string) {
     const context = await this.retrieveContext(message);
@@ -354,7 +361,7 @@ class ChatService {
     await this.saveConversation(userId, message, response);
     return response;
   }
-  
+
   @span('context-retrieval', { captureArgs: true })
   private async retrieveContext(message: string) {
     // Generate embeddings
@@ -362,11 +369,11 @@ class ChatService {
       model: 'text-embedding-ada-002',
       input: message,
     });
-    
+
     // Search vector database
     return await this.vectorDB.search(embeddings.data[0].embedding);
   }
-  
+
   @span('llm-generation', { captureArgs: true, captureReturn: true })
   private async generateResponse(message: string, context: any[]) {
     const completion = await this.openai.chat.completions.create({
@@ -376,7 +383,7 @@ class ChatService {
         { role: 'user', content: message },
       ],
     });
-    
+
     return completion.choices[0].message.content;
   }
 }
@@ -392,19 +399,19 @@ class RAGPipeline {
     const intent = await span('query-understanding', async () => {
       return await this.analyzeIntent(question);
     });
-    
+
     // Step 2: Document retrieval
-    const documents = await span('document-retrieval', async (spanInstance) => {
+    const documents = await span('document-retrieval', async spanInstance => {
       spanInstance.setAttribute('query.intent', intent);
       return await this.retrieveDocuments(question, intent);
     });
-    
+
     // Step 3: Answer generation
-    const answer = await span('answer-generation', async (spanInstance) => {
+    const answer = await span('answer-generation', async spanInstance => {
       spanInstance.setAttribute('documents.count', documents.length);
       return await this.generateAnswer(question, documents);
     });
-    
+
     return answer;
   }
 }
@@ -418,21 +425,21 @@ class AIAgent {
   async executeTask(task: string) {
     const plan = await this.planTask(task);
     const results = [];
-    
+
     for (const step of plan.steps) {
-      const result = await span(`execute-${step.type}`, async (spanInstance) => {
+      const result = await span(`execute-${step.type}`, async spanInstance => {
         spanInstance.setAttribute('step.type', step.type);
         spanInstance.setAttribute('step.description', step.description);
-        
+
         return await this.executeStep(step);
       });
-      
+
       results.push(result);
     }
-    
+
     return await this.synthesizeResults(results);
   }
-  
+
   @span('tool-usage', { captureArgs: true })
   private async useTool(toolName: string, parameters: any) {
     const tool = this.tools[toolName];
@@ -448,13 +455,13 @@ class DocumentProcessor {
   @trace('batch-processing')
   async processBatch(documents: Document[]) {
     const results = [];
-    
+
     for (const doc of documents) {
-      const result = await span('process-document', async (spanInstance) => {
+      const result = await span('process-document', async spanInstance => {
         spanInstance.setAttribute('document.id', doc.id);
         spanInstance.setAttribute('document.type', doc.type);
         spanInstance.setAttribute('document.size', doc.content.length);
-        
+
         try {
           const processed = await this.processDocument(doc);
           spanInstance.setStatus('OK');
@@ -464,10 +471,10 @@ class DocumentProcessor {
           throw error;
         }
       });
-      
+
       results.push(result);
     }
-    
+
     return results;
   }
 }
@@ -519,12 +526,12 @@ The Noveum Trace SDK is designed for minimal performance impact:
 
 ### Benchmarks
 
-| Operation | Overhead | Memory |
-|-----------|----------|---------|
-| Create Span | ~0.1ms | ~2KB |
-| Add Attribute | ~0.01ms | ~100B |
-| Finish Span | ~0.05ms | ~1KB |
-| Batch Send | ~50ms | ~10KB/100 spans |
+| Operation     | Overhead | Memory          |
+| ------------- | -------- | --------------- |
+| Create Span   | ~0.1ms   | ~2KB            |
+| Add Attribute | ~0.01ms  | ~100B           |
+| Finish Span   | ~0.05ms  | ~1KB            |
+| Batch Send    | ~50ms    | ~10KB/100 spans |
 
 ## 🔒 Security
 
@@ -540,22 +547,26 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 ### Development Setup
 
 1. Clone the repository:
+
 ```bash
-git clone https://github.com/Noveum/noveum-trace-typescript.git
-cd noveum-trace-typescript
+git clone https://github.com/Noveum/noveum-trace-ts.git
+cd noveum-trace-ts
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Run tests:
+
 ```bash
 npm test
 ```
 
 4. Build the project:
+
 ```bash
 npm run build
 ```
@@ -578,7 +589,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 - **📖 Documentation**: [https://docs.noveum.ai](https://docs.noveum.ai)
 - **💬 Discord**: [https://discord.gg/noveum](https://discord.gg/noveum)
 - **📧 Email**: support@noveum.ai
-- **🐛 Issues**: [GitHub Issues](https://github.com/Noveum/noveum-trace-typescript/issues)
+- **🐛 Issues**: [GitHub Issues](https://github.com/Noveum/noveum-trace-ts/issues)
 
 ## 🗺️ Roadmap
 
@@ -600,4 +611,3 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
     <a href="https://discord.gg/noveum">Discord</a>
   </p>
 </div>
-
