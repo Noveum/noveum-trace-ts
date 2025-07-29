@@ -79,4 +79,3 @@ export class RateSampler extends Sampler {
     super({ rate: Math.max(0, Math.min(1, rate)) });
   }
 }
-

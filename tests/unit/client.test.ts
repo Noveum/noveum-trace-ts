@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { NoveumClient, initializeClient, getGlobalClient } from '../src/core/client.js';
-import type { NoveumClientOptions } from '../src/core/types.js';
+import { NoveumClient, initializeClient, getGlobalClient, resetGlobalClient } from '../../src/core/client.js';
+import type { NoveumClientOptions } from '../../src/core/types.js';
 
 describe('NoveumClient', () => {
   let client: NoveumClient;
@@ -18,6 +18,7 @@ describe('NoveumClient', () => {
 
   afterEach(async () => {
     await client.shutdown();
+    resetGlobalClient();
   });
 
   describe('constructor', () => {
@@ -196,6 +197,10 @@ describe('Global Client', () => {
   });
 
   describe('getGlobalClient', () => {
+    beforeEach(() => {
+      resetGlobalClient();
+    });
+
     it('should throw error when not initialized', () => {
       expect(() => getGlobalClient()).toThrow(
         'Noveum client not initialized. Call initializeClient() first.'

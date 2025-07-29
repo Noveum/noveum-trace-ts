@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { trace, span, timed } from '../src/decorators/index.js';
-import { NoveumClient } from '../src/core/client.js';
-import type { NoveumClientOptions } from '../src/core/types.js';
+import { trace, span, timed, setGlobalClient } from '../../src/decorators/index.js';
+import { NoveumClient } from '../../src/core/client.js';
+import type { NoveumClientOptions } from '../../src/core/types.js';
 
 describe('Decorators', () => {
   let client: NoveumClient;
@@ -14,6 +14,7 @@ describe('Decorators', () => {
 
   beforeEach(() => {
     client = new NoveumClient(mockOptions);
+    setGlobalClient(client);
   });
 
   afterEach(async () => {
@@ -23,7 +24,7 @@ describe('Decorators', () => {
   describe('@trace', () => {
     it('should trace a method execution', async () => {
       class TestClass {
-        @trace('test-trace', { client })
+        @trace('test-trace')
         async testMethod(value: string): Promise<string> {
           return `processed: ${value}`;
         }
@@ -38,7 +39,6 @@ describe('Decorators', () => {
     it('should trace with custom attributes', async () => {
       class TestClass {
         @trace('test-trace', { 
-          client,
           attributes: { 'service.name': 'test-service' }
         })
         async testMethod(): Promise<string> {

@@ -1,0 +1,466 @@
+name: Maintenance & Health Checks
+
+on:
+  schedule:
+    # Run weekly on Sundays at 02:00 UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Job 1: Dependency Health Check
+  dependency-health:
+    name: Dependency Health Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for outdated dependencies
+        run: |
+          echo "📦 Checking for outdated dependencies..."
+          npm outdated || true
+
+          echo ""
+          echo "🔍 Checking for unused dependencies..."
+          npx depcheck --ignores="@types/*,tsx,vitest,@vitest/*,eslint*,prettier,rimraf,typedoc,@changesets/*,tsup,@commitlint/*,audit-ci,sort-package-json,commitizen,cz-conventional-changelog,standard-version,husky,lint-staged,globals" --ignore-patterns="examples/*"
+
+      - name: Security audit
+        run: |
+          echo "🔒 Running security audit..."
+          npm audit --audit-level=low || true
+
+      - name: Check bundle size trends
+        run: |
+          echo "📊 Analyzing bundle size..."
+          npm run build
+
+          echo "Current bundle sizes:"
+          ls -lh dist/*.mjs dist/*.js | awk '{print $5 "\t" $9}'
+
+          # Check if bundle size is growing significantly (portable across OS)
+          MAIN_SIZE=$(wc -c < dist/index.mjs)
+          echo "Main bundle size: $MAIN_SIZE bytes"
+
+          if [ $MAIN_SIZE -gt 1048576 ]; then  # 1MB
+            echo "⚠️ Bundle size is getting large (>1MB)"
+          fi
+
+  # Job 2: Code Quality Metrics
+  code-quality:
+    name: Code Quality Metrics
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript compilation check
+        run: npm run typecheck
+
+      - name: Linting analysis
+        run: |
+          echo "🔍 Running ESLint analysis..."
+          npm run lint || true
+
+      - name: Code complexity analysis
+        run: |
+          echo "📈 Analyzing code complexity..."
+
+          # Count lines of code
+          echo "Lines of code by category:"
+          echo "Source files (.ts): $(find src -name '*.ts' -exec wc -l {} + | tail -1 | awk '{print $1}')"
+          echo "Unit test files (.test.ts): $(find tests/unit -name '*.test.ts' -exec wc -l {} + | tail -1 | awk '{print $1}' 2>/dev/null || echo 0)"
+          echo "Integration tests: $(find tests/integration -name '*.ts' -exec wc -l {} + | tail -1 | awk '{print $1}' 2>/dev/null || echo 0)"
+
+          # Function count
+          echo ""
+          echo "Exported functions: $(grep -r "^export.*function\|^export.*=" src/ | wc -l)"
+          echo "Total functions: $(grep -r "function\|=>" src/ | wc -l)"
+
+      - name: Test coverage analysis
+        run: |
+          echo "🧪 Running test coverage analysis..."
+          NODE_ENV=test npm test -- --coverage --reporter=json > coverage-report.json 2>/dev/null || true
+
+          if [ -f coverage/lcov.info ]; then
+            echo "✅ Coverage report generated"
+            
+            # Extract coverage percentage using awk
+            COVERAGE_DATA=$(awk -F: '/^SF:/ {files++} /^DA:/ {split($2,a,","); total++; if(a[2]>0) covered++} END {if(total>0) printf "%.1f", (covered/total)*100; else print "0"}' coverage/lcov.info)
+            echo "Test coverage: ${COVERAGE_DATA}%"
+          else
+            echo "⚠️ No coverage report found"
+          fi
+
+      - name: Upload coverage reports to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Noveum/noveum-trace-typescript
+          files: ./coverage/lcov.info
+          flags: maintenance
+          name: codecov-maintenance
+
+  # Job 3: Performance Monitoring
+  performance-monitoring:
+    name: Performance Monitoring
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Performance benchmarks
+        run: |
+          echo "🚀 Running performance benchmarks..."
+
+          # Create comprehensive performance test
+          cat > maintenance-perf-test.js << 'EOF'
+          const { NoveumClient } = require('./dist/index.js');
+
+          async function performanceTest() {
+            console.log('🔄 Starting performance tests...\n');
+            
+            const client = new NoveumClient({
+              apiKey: 'test-key',
+              project: 'perf-test',
+              enabled: false
+            });
+
+            // Test 1: Trace creation performance
+            console.time('1. Create 1000 traces');
+            const tracePromises = [];
+            for (let i = 0; i < 1000; i++) {
+              tracePromises.push(client.createTrace(`trace-${i}`, {
+                attributes: { index: i, type: 'performance-test' }
+              }));
+            }
+            await Promise.all(tracePromises);
+            console.timeEnd('1. Create 1000 traces');
+            
+            // Test 2: Span creation performance
+            const trace = await client.createTrace('span-test');
+            console.time('2. Create 500 spans');
+            const spanPromises = [];
+            for (let i = 0; i < 500; i++) {
+              spanPromises.push(client.startSpan(`span-${i}`, {
+                traceId: trace.traceId,
+                attributes: { index: i }
+              }));
+            }
+            await Promise.all(spanPromises);
+            console.timeEnd('2. Create 500 spans');
+            
+            // Test 3: Event addition performance
+            console.time('3. Add 2000 events');
+            for (let i = 0; i < 2000; i++) {
+              trace.addEvent(`event-${i}`, { index: i });
+            }
+            console.timeEnd('3. Add 2000 events');
+            
+            // Test 4: Serialization performance
+            console.time('4. Serialize trace');
+            for (let i = 0; i < 100; i++) {
+              trace.serialize();
+            }
+            console.timeEnd('4. Serialize trace');
+            
+            await client.shutdown();
+            console.log('\n✅ Performance tests completed');
+          }
+
+          performanceTest().catch(console.error);
+          EOF
+
+          node maintenance-perf-test.js
+
+      - name: Memory usage analysis
+        run: |
+          echo "💾 Memory usage analysis..."
+
+          # Create memory test
+          cat > memory-test.js << 'EOF'
+          const { NoveumClient } = require('./dist/index.js');
+
+          async function memoryTest() {
+            const used = process.memoryUsage();
+            console.log('Initial memory usage:');
+            for (let key in used) {
+              console.log(`${key}: ${Math.round(used[key] / 1024 / 1024 * 100) / 100} MB`);
+            }
+            
+            // Create many objects
+            const client = new NoveumClient({
+              apiKey: 'test-key',
+              project: 'memory-test',
+              enabled: false
+            });
+            
+            const traces = [];
+            for (let i = 0; i < 1000; i++) {
+              traces.push(await client.createTrace(`trace-${i}`));
+            }
+            
+            const usedAfter = process.memoryUsage();
+            console.log('\nMemory usage after creating 1000 traces:');
+            for (let key in usedAfter) {
+              console.log(`${key}: ${Math.round(usedAfter[key] / 1024 / 1024 * 100) / 100} MB`);
+            }
+            
+            await client.shutdown();
+          }
+
+          memoryTest().catch(console.error);
+          EOF
+
+          node memory-test.js
+
+  # Job 4: Integration Health Check
+  integration-health:
+    name: Integration Health Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Health check tests
+        run: npm run test:health
+
+      - name: Smoke tests
+        run: npm run test:smoke
+
+      - name: Framework integration check
+        run: |
+          echo "🔌 Testing framework integrations..."
+
+          # Basic import tests
+          node -e "
+            console.log('Testing imports...');
+            const express = require('./dist/integrations/express.js');
+            const nextjs = require('./dist/integrations/nextjs.js');
+            const hono = require('./dist/integrations/hono.js');
+            
+            console.log('Express exports:', Object.keys(express));
+            console.log('Next.js exports:', Object.keys(nextjs));
+            console.log('Hono exports:', Object.keys(hono));
+            
+            console.log('✅ All integrations can be imported');
+          "
+
+      - name: API connectivity check
+        env:
+          NOVEUM_API_KEY: ${{ secrets.NOVEUM_API_KEY }}
+          NOVEUM_PROJECT: 'maintenance-health-check'
+          NOVEUM_ENVIRONMENT: 'github-actions'
+        run: |
+          if [ -z "$NOVEUM_API_KEY" ]; then
+            echo "⏭️ Skipping API connectivity check - no API key provided"
+            exit 0
+          fi
+
+          echo "🌐 Testing API connectivity..."
+
+          # Create a simple connectivity test
+          cat > api-health-test.js << 'EOF'
+          const { NoveumClient } = require('./dist/index.js');
+
+          async function apiHealthTest() {
+            const client = new NoveumClient({
+              apiKey: process.env.NOVEUM_API_KEY,
+              project: process.env.NOVEUM_PROJECT,
+              environment: process.env.NOVEUM_ENVIRONMENT,
+              debug: false
+            });
+            
+            console.log('Creating test trace...');
+            const trace = await client.createTrace('health-check', {
+              attributes: {
+                'test.type': 'health-check',
+                'test.timestamp': new Date().toISOString()
+              }
+            });
+            
+            trace.addEvent('health-check-started');
+            await trace.finish();
+            
+            console.log('Flushing to API...');
+            await client.flush();
+            
+            console.log('✅ API connectivity verified');
+            await client.shutdown();
+          }
+
+          apiHealthTest().catch(err => {
+            console.error('❌ API health check failed:', err.message);
+            process.exit(1);
+          });
+          EOF
+
+          node api-health-test.js
+
+  # Job 5: Documentation Health
+  documentation-health:
+    name: Documentation Health
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate documentation
+        run: npm run docs
+
+      - name: Check documentation completeness
+        run: |
+          echo "📚 Checking documentation completeness..."
+
+          # Check README structure
+          echo "README.md sections:"
+          grep "^##" README.md || echo "No sections found"
+
+          # Check for common sections
+          REQUIRED_SECTIONS=("Installation" "Usage" "API" "Examples")
+          for section in "${REQUIRED_SECTIONS[@]}"; do
+            if grep -q "## $section" README.md; then
+              echo "✅ $section section found"
+            else
+              echo "⚠️ $section section missing"
+            fi
+          done
+
+          # Check for JSDoc coverage
+          echo ""
+          echo "JSDoc coverage:"
+          TOTAL_EXPORTS=$(grep -r "^export " src/ | wc -l)
+          DOCUMENTED_EXPORTS=$(grep -r "@param\|@returns\|@example" src/ | wc -l)
+          echo "Total exports: $TOTAL_EXPORTS"
+          echo "Documented exports: $DOCUMENTED_EXPORTS"
+
+          if [ $TOTAL_EXPORTS -gt 0 ]; then
+            COVERAGE=$((DOCUMENTED_EXPORTS * 100 / TOTAL_EXPORTS))
+            echo "Documentation coverage: $COVERAGE%"
+            
+            if [ $COVERAGE -lt 50 ]; then
+              echo "⚠️ Low documentation coverage"
+            else
+              echo "✅ Good documentation coverage"
+            fi
+          fi
+
+      - name: Link checking
+        run: |
+          echo "🔗 Checking links in documentation..."
+
+          # Basic link check for README
+          if command -v markdown-link-check >/dev/null; then
+            npx markdown-link-check README.md || true
+          else
+            echo "⚠️ markdown-link-check not available, skipping link validation"
+          fi
+
+  # Final job: Health report
+  health-report:
+    name: Maintenance Report
+    runs-on: ubuntu-latest
+    needs:
+      [
+        dependency-health,
+        code-quality,
+        performance-monitoring,
+        integration-health,
+        documentation-health,
+      ]
+    if: always()
+
+    steps:
+      - name: Generate health report
+        run: |
+          echo "🏥 Maintenance & Health Report"
+          echo "============================="
+          echo "Dependency Health: ${{ needs.dependency-health.result }}"
+          echo "Code Quality: ${{ needs.code-quality.result }}"
+          echo "Performance: ${{ needs.performance-monitoring.result }}"
+          echo "Integration Health: ${{ needs.integration-health.result }}"
+          echo "Documentation: ${{ needs.documentation-health.result }}"
+          echo ""
+
+          # Count successes
+          RESULTS=("${{ needs.dependency-health.result }}" 
+                   "${{ needs.code-quality.result }}"
+                   "${{ needs.performance-monitoring.result }}"
+                   "${{ needs.integration-health.result }}"
+                   "${{ needs.documentation-health.result }}")
+
+          SUCCESS_COUNT=0
+          for result in "${RESULTS[@]}"; do
+            if [ "$result" = "success" ]; then
+              ((SUCCESS_COUNT++))
+            fi
+          done
+
+          echo "Health Score: $SUCCESS_COUNT/5 checks passed"
+
+          if [ $SUCCESS_COUNT -eq 5 ]; then
+            echo "🎉 All health checks passed! Project is in excellent condition."
+          elif [ $SUCCESS_COUNT -ge 3 ]; then
+            echo "✅ Most health checks passed. Some areas may need attention."
+          else
+            echo "⚠️ Multiple health checks failed. Project needs maintenance attention."
+          fi
+
+          echo ""
+          echo "Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"

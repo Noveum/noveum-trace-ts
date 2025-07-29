@@ -29,7 +29,7 @@ export interface ISpan {
   /**
    * Parent span ID if this is a child span
    */
-  readonly parentSpanId?: string;
+  readonly parentSpanId: string | undefined;
 
   /**
    * Name of the operation this span represents
@@ -44,12 +44,17 @@ export interface ISpan {
   /**
    * End time of the span (undefined if not finished)
    */
-  readonly endTime?: Date;
+  readonly endTime: Date | undefined;
 
   /**
    * Whether the span has been finished
    */
   readonly isFinished: boolean;
+
+  /**
+   * Status of the span
+   */
+  readonly status: SpanStatus;
 
   /**
    * Set multiple attributes on the span
@@ -112,7 +117,7 @@ export interface ITrace {
   /**
    * End time of the trace (set when finished)
    */
-  endTime?: Date;
+  endTime: Date | undefined;
 
   /**
    * Whether the trace has been finished
@@ -150,6 +155,17 @@ export interface ITrace {
    * @param attributes - Optional event attributes
    */
   addEvent(name: string, attributes?: Attributes): void;
+
+  /**
+   * Set the trace status
+   * @param status - Status value
+   */
+  setStatus(status: SpanStatus): void;
+
+  /**
+   * Get the trace status
+   */
+  getStatus(): SpanStatus;
 
   /**
    * Finish the trace
@@ -285,10 +301,9 @@ export interface ISampler {
   /**
    * Make a sampling decision for a trace
    * @param traceId - Trace ID
-   * @param name - Trace name
-   * @param attributes - Trace attributes
+   * @param name - Trace name (optional)
    */
-  shouldSample(traceId: string, name: string, attributes?: Attributes): boolean;
+  shouldSample(traceId: string, name?: string): boolean;
 }
 
 /**
@@ -346,4 +361,3 @@ export interface IIdGenerator {
    */
   generateSpanId(): string;
 }
-

@@ -32,16 +32,18 @@ new NoveumClient(options?: NoveumClientOptions)
 Creates a new trace.
 
 **Parameters:**
+
 - `name` - Name of the trace
 - `options` - Optional trace configuration
 
 **Returns:** Promise that resolves to a new trace instance
 
 **Example:**
+
 ```typescript
 const trace = await client.startTrace('user-query', {
   level: TraceLevel.INFO,
-  attributes: { 'user.id': '123' }
+  attributes: { 'user.id': '123' },
 });
 ```
 
@@ -50,16 +52,18 @@ const trace = await client.startTrace('user-query', {
 Creates a new span. If no active trace exists, creates one automatically.
 
 **Parameters:**
+
 - `name` - Name of the span
 - `options` - Optional span configuration
 
 **Returns:** Promise that resolves to a new span instance
 
 **Example:**
+
 ```typescript
 const span = await client.startSpan('llm-call', {
   kind: SpanKind.CLIENT,
-  attributes: { 'model': 'gpt-4' }
+  attributes: { model: 'gpt-4' },
 });
 ```
 
@@ -68,6 +72,7 @@ const span = await client.startSpan('llm-call', {
 Convenience method to run a function within a new trace.
 
 **Example:**
+
 ```typescript
 const result = await client.trace('process-query', async () => {
   // Your code here
@@ -159,6 +164,7 @@ Adds an event to the span.
 Sets the status of the span.
 
 **Status values:**
+
 - `SpanStatus.UNSET` - Default status
 - `SpanStatus.OK` - Operation completed successfully
 - `SpanStatus.ERROR` - Operation failed
@@ -232,7 +238,7 @@ class Service {
   @autoSpan({
     captureArgs: true,
     captureResult: true,
-    ignoreArgs: ['password']
+    ignoreArgs: ['password'],
   })
   async authenticate(username: string, password: string) {
     // Arguments (except password) and result are captured
@@ -262,7 +268,7 @@ class Service {
   @retry({
     maxAttempts: 3,
     delay: 1000,
-    backoff: 2
+    backoff: 2,
   })
   async unreliableOperation() {
     // Retries are automatically traced
@@ -279,11 +285,13 @@ class Service {
 ```typescript
 import { noveumMiddleware } from '@noveum/trace/integrations/express';
 
-app.use(noveumMiddleware(client, {
-  captureHeaders: true,
-  captureBody: false,
-  ignoreRoutes: ['/health']
-}));
+app.use(
+  noveumMiddleware(client, {
+    captureHeaders: true,
+    captureBody: false,
+    ignoreRoutes: ['/health'],
+  })
+);
 ```
 
 #### Utility Functions
@@ -299,7 +307,7 @@ app.use(noveumMiddleware(client, {
 ```typescript
 import { withNoveumTrace } from '@noveum/trace/integrations/nextjs';
 
-export const POST = withNoveumTrace(async (request) => {
+export const POST = withNoveumTrace(async request => {
   // Your API route logic
   return Response.json({ message: 'Hello' });
 }, client);
@@ -334,14 +342,17 @@ Sends trace data to the Noveum API.
 ```typescript
 import { HttpTransport } from '@noveum/trace';
 
-const transport = new HttpTransport({
-  batchSize: 100,
-  flushInterval: 5000,
-  maxRetries: 3
-}, {
-  apiKey: 'your-api-key',
-  endpoint: 'https://api.noveum.ai/api/v1/traces'
-});
+const transport = new HttpTransport(
+  {
+    batchSize: 100,
+    flushInterval: 5000,
+    maxRetries: 3,
+  },
+  {
+    apiKey: 'your-api-key',
+    endpoint: 'https://api.noveum.ai/api/v1/traces',
+  }
+);
 ```
 
 ### Mock Transport
@@ -392,93 +403,131 @@ import { AttributeSampler } from '@noveum/trace';
 const sampler = new AttributeSampler([
   {
     namePattern: 'important-*',
-    sample: true
+    sample: true,
   },
   {
-    attributeConditions: [
-      { key: 'user.tier', operator: 'equals', value: 'premium' }
-    ],
-    sample: true
-  }
+    attributeConditions: [{ key: 'user.tier', operator: 'equals', value: 'premium' }],
+    sample: true,
+  },
 ]);
+```
+
+### Custom Samplers
+
+The SDK allows you to implement custom sampling logic by creating a class that implements the `ISampler` interface.
+
+#### ISampler Interface
+
+```typescript
+interface ISampler {
+  /**
+   * Make a sampling decision for a trace
+   * @param traceId - Trace ID
+   * @param name - Trace name (optional)
+   */
+  shouldSample(traceId: string, name?: string): boolean;
+}
+```
+
+#### Example: Custom Rate-Based Sampler
+
+```typescript
+import { ISampler } from '@noveum/trace';
+
+class CustomRateSampler implements ISampler {
+  private rate: number;
+
+  constructor(rate: number) {
+    this.rate = Math.max(0, Math.min(1, rate)); // Clamp between 0 and 1
+  }
+
+  shouldSample(traceId: string, name?: string): boolean {
+    // Sample based on trace ID hash for deterministic sampling
+    const hash = this.hashTraceId(traceId);
+    return hash < this.rate;
+  }
+
+  private hashTraceId(traceId: string): number {
+    let hash = 0;
+    for (let i = 0; i < traceId.length; i++) {
+      hash = ((hash << 5) - hash + traceId.charCodeAt(i)) & 0xffffffff;
+    }
+    return Math.abs(hash) / 0xffffffff;
+  }
+}
+
+// Usage
+const sampler = new CustomRateSampler(0.1); // 10% sampling rate
+const client = new NoveumClient({
+  apiKey: 'your-api-key',
+  sampler: sampler,
+});
+```
+
+#### Example: Name-Based Conditional Sampler
+
+```typescript
+class ConditionalSampler implements ISampler {
+  private defaultRate: number;
+  private patterns: Map<RegExp, number>;
+
+  constructor(defaultRate: number) {
+    this.defaultRate = defaultRate;
+    this.patterns = new Map();
+  }
+
+  addPattern(pattern: string, rate: number): void {
+    this.patterns.set(new RegExp(pattern), rate);
+  }
+
+  shouldSample(traceId: string, name?: string): boolean {
+    // Check name-based patterns first
+    if (name) {
+      for (const [pattern, rate] of this.patterns) {
+        if (pattern.test(name)) {
+          return Math.random() < rate;
+        }
+      }
+    }
+
+    // Fall back to default rate
+    return Math.random() < this.defaultRate;
+  }
+}
+
+// Usage
+const sampler = new ConditionalSampler(0.01); // 1% default rate
+sampler.addPattern('^error-', 1.0); // 100% for error traces
+sampler.addPattern('^debug-', 0.001); // 0.1% for debug traces
+
+const client = new NoveumClient({
+  apiKey: 'your-api-key',
+  sampler: sampler,
+});
+```
+
+#### Migration from v0.x
+
+If you have existing custom samplers from v0.x, update the parameter order:
+
+```typescript
+// ❌ v0.x (deprecated)
+class OldSampler implements ISampler {
+  shouldSample(name: string, traceId: string): boolean {
+    return Math.random() < 0.5;
+  }
+}
+
+// ✅ v1.x (current)
+class NewSampler implements ISampler {
+  shouldSample(traceId: string, name?: string): boolean {
+    return Math.random() < 0.5;
+  }
+}
 ```
 
 ## Configuration
 
 ### Environment Variables
 
-- `NOVEUM_API_KEY` - API key for authentication
-- `NOVEUM_PROJECT` - Project identifier
-- `NOVEUM_ENVIRONMENT` - Environment name
-- `NOVEUM_ENDPOINT` - API endpoint URL
-
-### Configuration Object
-
-```typescript
-const client = new NoveumClient({
-  apiKey: 'your-api-key',
-  project: 'your-project',
-  environment: 'production',
-  endpoint: 'https://api.noveum.ai/api/v1/traces',
-  transport: {
-    batchSize: 100,
-    flushInterval: 5000,
-    maxRetries: 3,
-    timeout: 30000
-  },
-  tracing: {
-    sampleRate: 1.0,
-    maxSpansPerTrace: 1000,
-    maxAttributesPerSpan: 128,
-    autoInstrumentation: true
-  }
-});
-```
-
-## Error Handling
-
-### Error Types
-
-- `NoveumError` - Base error class
-- `ConfigurationError` - Configuration-related errors
-- `TransportError` - Transport-related errors
-- `InstrumentationError` - Instrumentation-related errors
-
-### Exception Recording
-
-```typescript
-try {
-  await riskyOperation();
-} catch (error) {
-  span.recordException(error);
-  throw error;
-}
-```
-
-### Error Events
-
-```typescript
-span.addEvent('error', {
-  'error.type': error.name,
-  'error.message': error.message
-});
-```
-
-## Best Practices
-
-1. **Always finish spans and traces** - Use try/finally blocks or the convenience methods
-2. **Use meaningful names** - Make span and trace names descriptive
-3. **Add relevant attributes** - Include context that helps with debugging
-4. **Handle errors gracefully** - Record exceptions but don't let tracing break your app
-5. **Use sampling in production** - Don't trace every request in high-traffic applications
-6. **Batch transport** - Use appropriate batch sizes for your traffic volume
-7. **Clean shutdown** - Always call `client.shutdown()` when your application exits
-
-## Performance Considerations
-
-- Tracing has minimal overhead when properly configured
-- Use sampling to reduce data volume in production
-- Batch transport requests to reduce network overhead
-- Avoid capturing large payloads as attributes
-- Use async operations to prevent blocking your application
-
+- `

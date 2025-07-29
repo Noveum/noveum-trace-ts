@@ -2,23 +2,20 @@
  * Trace implementation for the Noveum Trace SDK
  */
 
-import type {
-  ITrace,
-  ISpan,
-  ITransport,
-} from './interfaces.js';
+import type { ITrace, ISpan, ITransport } from './interfaces.js';
 import type {
   Attributes,
   SpanOptions,
   TraceEvent,
-  TraceLevel,
   TraceOptions,
   SerializedTrace,
 } from './types.js';
+import { TraceLevel, SpanStatus } from './types.js';
 import {
   generateTraceId,
   sanitizeAttributes,
   getCurrentTimestamp,
+  getSdkVersion,
 } from '../utils/index.js';
 import { Span } from './span.js';
 
@@ -30,7 +27,7 @@ export class Trace implements ITrace {
   private readonly _name: string;
   private readonly _level: TraceLevel;
   private readonly _startTime: Date;
-  private readonly _transport?: ITransport;
+  private readonly _transport: ITransport | undefined;
 
   private _endTime?: Date;
   private _attributes: Attributes = {};
@@ -38,12 +35,9 @@ export class Trace implements ITrace {
   private _spans: ISpan[] = [];
   private _isFinished = false;
   private _activeSpan?: ISpan;
+  private _status: SpanStatus = SpanStatus.OK;
 
-  constructor(
-    name: string,
-    options: TraceOptions = {},
-    transport?: ITransport
-  ) {
+  constructor(name: string, options: TraceOptions = {}, transport?: ITransport) {
     this._traceId = generateTraceId();
     this._name = name;
     this._level = options.level ?? TraceLevel.INFO;
@@ -79,7 +73,7 @@ export class Trace implements ITrace {
     return this._isFinished;
   }
 
-  get spans(): readonly ISpan[] {
+  get spans(): ISpan[] {
     return [...this._spans];
   }
 
@@ -93,6 +87,20 @@ export class Trace implements ITrace {
 
   get activeSpan(): ISpan | undefined {
     return this._activeSpan;
+  }
+
+  /**
+   * Set the trace status
+   */
+  setStatus(status: SpanStatus): void {
+    this._status = status;
+  }
+
+  /**
+   * Get the trace status
+   */
+  getStatus(): SpanStatus {
+    return this._status;
   }
 
   async startSpan(name: string, options: SpanOptions = {}): Promise<ISpan> {
@@ -114,7 +122,10 @@ export class Trace implements ITrace {
 
   setAttributes(attributes: Attributes): void {
     if (this._isFinished) {
-      console.warn('Cannot set attributes on a finished trace');
+      // Only warn in non-test environments to avoid noise during testing
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('Cannot set attributes on a finished trace');
+      }
       return;
     }
 
@@ -124,7 +135,10 @@ export class Trace implements ITrace {
 
   setAttribute(key: string, value: Attributes[string]): void {
     if (this._isFinished) {
-      console.warn('Cannot set attribute on a finished trace');
+      // Only warn in non-test environments to avoid noise during testing
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('Cannot set attribute on a finished trace');
+      }
       return;
     }
 
@@ -142,7 +156,7 @@ export class Trace implements ITrace {
 
     const event: TraceEvent = {
       name,
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
       attributes: attributes ? sanitizeAttributes(attributes) : undefined,
     };
 
@@ -161,11 +175,9 @@ export class Trace implements ITrace {
     const unfinishedSpans = this._spans.filter(span => !span.isFinished);
     if (unfinishedSpans.length > 0) {
       console.warn(`Finishing trace with ${unfinishedSpans.length} unfinished spans`);
-      
+
       // Finish all unfinished spans
-      await Promise.all(
-        unfinishedSpans.map(span => span.finish(this._endTime))
-      );
+      await Promise.all(unfinishedSpans.map(span => span.finish(this._endTime)));
     }
 
     this._isFinished = true;
@@ -191,7 +203,7 @@ export class Trace implements ITrace {
       name: this._name,
       startTime: this._startTime.toISOString(),
       endTime: this._endTime?.toISOString(),
-      level: this._level,
+      status: this._status,
       attributes: { ...this._attributes },
       events: this._events.map(event => ({
         ...event,
@@ -242,14 +254,25 @@ export class Trace implements ITrace {
     duration?: number;
   } {
     const finishedSpans = this._spans.filter(span => span.isFinished);
-    const errorSpans = this._spans.filter(span => span.status === 'ERROR');
+    const errorSpans = this._spans.filter(span => span.status === SpanStatus.ERROR);
 
-    return {
+    const duration = this.getDuration();
+    const result: {
+      spanCount: number;
+      finishedSpanCount: number;
+      errorSpanCount: number;
+      duration?: number;
+    } = {
       spanCount: this._spans.length,
       finishedSpanCount: finishedSpans.length,
       errorSpanCount: errorSpans.length,
-      duration: this.getDuration(),
     };
+
+    if (duration !== undefined) {
+      result.duration = duration;
+    }
+
+    return result;
   }
 
   /**
@@ -288,10 +311,14 @@ export class Trace implements ITrace {
    * Create a child trace (for distributed tracing scenarios)
    */
   createChildTrace(name: string, options: Omit<TraceOptions, 'parentTraceId'> = {}): Trace {
-    return new Trace(name, {
-      ...options,
-      parentTraceId: this._traceId,
-    }, this._transport);
+    return new Trace(
+      name,
+      {
+        ...options,
+        parentTraceId: this._traceId,
+      },
+      this._transport
+    );
   }
 
   private async _sendToTransport(): Promise<void> {
@@ -305,7 +332,7 @@ export class Trace implements ITrace {
         project: 'default', // This should come from client configuration
         environment: 'development', // This should come from client configuration
         timestamp: getCurrentTimestamp(),
-        sdkVersion: '0.1.0', // This should come from package.json
+        sdkVersion: getSdkVersion(),
       },
     };
 
@@ -319,7 +346,7 @@ export class Trace implements ITrace {
     const duration = this.getDuration();
     const durationStr = duration !== undefined ? `${duration}ms` : 'ongoing';
     const stats = this.getStats();
-    
+
     return `Trace(${this._name}, ${this._traceId}, ${stats.spanCount} spans, ${durationStr})`;
   }
 
@@ -335,10 +362,13 @@ export class Trace implements ITrace {
       duration: number | null;
     };
   } {
+    const stats = this.getStats();
     return {
       trace: this.serialize(),
-      stats: this.getStats(),
+      stats: {
+        ...stats,
+        duration: stats.duration ?? null,
+      },
     };
   }
 }
-

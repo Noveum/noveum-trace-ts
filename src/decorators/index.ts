@@ -2,9 +2,7 @@
  * TypeScript decorators for automatic tracing
  */
 
-import type { ISpan, ITrace } from '../core/interfaces.js';
 import type { SpanOptions, TraceOptions, Attributes } from '../core/types.js';
-import { getGlobalContextManager } from '../context/context-manager.js';
 
 /**
  * Global client instance for decorators
@@ -23,7 +21,9 @@ export function setGlobalClient(client: any): void {
  */
 function getGlobalClient(): any {
   if (!globalClient) {
-    throw new Error('Global client not set. Make sure to initialize NoveumClient before using decorators.');
+    throw new Error(
+      'Global client not set. Make sure to initialize NoveumClient before using decorators.'
+    );
   }
   return globalClient;
 }
@@ -33,14 +33,15 @@ function getGlobalClient(): any {
  */
 export function trace(nameOrOptions?: string | TraceOptions, options?: TraceOptions) {
   return function <T extends (...args: any[]) => any>(
-    target: any,
+    target: object,
     propertyKey: string | symbol,
     descriptor: TypedPropertyDescriptor<T>
   ): TypedPropertyDescriptor<T> {
-    const originalMethod = descriptor.value;
-    if (!originalMethod) {
+    if (!descriptor || typeof descriptor.value !== 'function') {
       throw new Error('Trace decorator can only be applied to methods');
     }
+
+    const originalMethod = descriptor.value;
 
     // Determine trace name and options
     let traceName: string;
@@ -56,19 +57,48 @@ export function trace(nameOrOptions?: string | TraceOptions, options?: TraceOpti
       traceName = `${target.constructor.name}.${String(propertyKey)}`;
     }
 
-    descriptor.value = async function (this: any, ...args: any[]) {
+    descriptor.value = function (this: unknown, ...args: any[]) {
       const client = getGlobalClient();
-      const trace = await client.startTrace(traceName, traceOptions);
 
       try {
-        const result = await client.withTrace(trace, async () => {
-          return await originalMethod.apply(this, args);
-        });
+        const result = originalMethod.apply(this, args);
 
-        await trace.finish();
-        return result;
+        // Check if the result is a Promise (async method)
+        if (result && typeof result.then === 'function') {
+          // Async method
+          return (async () => {
+            const trace = await client.startTrace(traceName, traceOptions);
+
+            try {
+              const resolvedResult = await result;
+              await trace.finish();
+              return resolvedResult;
+            } catch (error) {
+              await trace.finish();
+              throw error;
+            }
+          })();
+        } else {
+          // Sync method
+          client
+            .startTrace(traceName, traceOptions)
+            .then((trace: any) => {
+              trace.finish();
+            })
+            .catch(() => {
+              // Ignore trace creation errors for sync methods
+            });
+
+          return result;
+        }
       } catch (error) {
-        await trace.finish();
+        // For sync errors, create trace to record the error
+        client
+          .startTrace(traceName, traceOptions)
+          .then((trace: any) => {
+            trace.finish();
+          })
+          .catch(() => {});
         throw error;
       }
     } as T;
@@ -86,10 +116,11 @@ export function span(nameOrOptions?: string | SpanOptions, options?: SpanOptions
     propertyKey: string | symbol,
     descriptor: TypedPropertyDescriptor<T>
   ): TypedPropertyDescriptor<T> {
-    const originalMethod = descriptor.value;
-    if (!originalMethod) {
+    if (!descriptor || typeof descriptor.value !== 'function') {
       throw new Error('Span decorator can only be applied to methods');
     }
+
+    const originalMethod = descriptor.value;
 
     // Determine span name and options
     let spanName: string;
@@ -105,19 +136,48 @@ export function span(nameOrOptions?: string | SpanOptions, options?: SpanOptions
       spanName = `${target.constructor.name}.${String(propertyKey)}`;
     }
 
-    descriptor.value = async function (this: any, ...args: any[]) {
+    descriptor.value = function (this: any, ...args: any[]) {
       const client = getGlobalClient();
-      const span = await client.startSpan(spanName, spanOptions);
 
       try {
-        const result = await client.withSpan(span, async () => {
-          return await originalMethod.apply(this, args);
-        });
+        const result = originalMethod.apply(this, args);
 
-        await span.finish();
-        return result;
+        // Check if the result is a Promise (async method)
+        if (result && typeof result.then === 'function') {
+          // Async method
+          return (async () => {
+            const span = await client.startSpan(spanName, spanOptions);
+
+            try {
+              const resolvedResult = await result;
+              await span.finish();
+              return resolvedResult;
+            } catch (error) {
+              await span.finish();
+              throw error;
+            }
+          })();
+        } else {
+          // Sync method
+          client
+            .startSpan(spanName, spanOptions)
+            .then((span: any) => {
+              span.finish();
+            })
+            .catch(() => {
+              // Ignore span creation errors for sync methods
+            });
+
+          return result;
+        }
       } catch (error) {
-        await span.finish();
+        // For sync errors, create span to record the error
+        client
+          .startSpan(spanName, spanOptions)
+          .then((span: any) => {
+            span.finish();
+          })
+          .catch(() => {});
         throw error;
       }
     } as T;
@@ -129,13 +189,15 @@ export function span(nameOrOptions?: string | SpanOptions, options?: SpanOptions
 /**
  * Auto-span decorator - automatically creates spans with method parameters as attributes
  */
-export function autoSpan(options: {
-  name?: string;
-  captureArgs?: boolean;
-  captureResult?: boolean;
-  ignoreArgs?: string[];
-  spanOptions?: SpanOptions;
-} = {}) {
+export function autoSpan(
+  options: {
+    name?: string;
+    captureArgs?: boolean;
+    captureResult?: boolean;
+    ignoreArgs?: string[];
+    spanOptions?: SpanOptions;
+  } = {}
+) {
   return function <T extends (...args: any[]) => any>(
     target: any,
     propertyKey: string | symbol,
@@ -151,41 +213,94 @@ export function autoSpan(options: {
     const captureResult = options.captureResult ?? false;
     const ignoreArgs = new Set(options.ignoreArgs || []);
 
-    descriptor.value = async function (this: any, ...args: any[]) {
+    // Create a wrapper that handles both sync and async methods
+    descriptor.value = function (this: any, ...args: any[]) {
       const client = getGlobalClient();
-      const span = await client.startSpan(spanName, options.spanOptions);
-
-      // Capture method arguments as attributes
-      if (captureArgs) {
-        const paramNames = getParameterNames(originalMethod);
-        const attributes: Attributes = {};
-
-        paramNames.forEach((paramName, index) => {
-          if (!ignoreArgs.has(paramName) && index < args.length) {
-            const value = args[index];
-            if (isSerializable(value)) {
-              attributes[`arg.${paramName}`] = value;
-            }
-          }
-        });
-
-        span.setAttributes(attributes);
-      }
 
       try {
-        const result = await client.withSpan(span, async () => {
-          return await originalMethod.apply(this, args);
-        });
+        // Call the original method first
+        const result = originalMethod.apply(this, args);
 
-        // Capture result as attribute
-        if (captureResult && isSerializable(result)) {
-          span.setAttribute('result', result);
+        // Check if the result is a Promise (async method)
+        if (result && typeof result.then === 'function') {
+          // Async method - handle with promises
+          return (async () => {
+            const span = await client.startSpan(spanName, options.spanOptions);
+
+            // Capture method arguments as attributes
+            if (captureArgs) {
+              const paramNames = getParameterNames(originalMethod);
+              const attributes: Attributes = {};
+
+              paramNames.forEach((paramName, index) => {
+                if (!ignoreArgs.has(paramName) && index < args.length) {
+                  const value = args[index];
+                  if (isSerializable(value)) {
+                    attributes[`arg.${paramName}`] = value;
+                  }
+                }
+              });
+
+              span.setAttributes(attributes);
+            }
+
+            try {
+              const resolvedResult = await result;
+
+              // Capture result as attribute
+              if (captureResult && isSerializable(resolvedResult)) {
+                span.setAttribute('result', resolvedResult);
+              }
+              await span.finish();
+              return resolvedResult;
+            } catch (error) {
+              await span.finish();
+              throw error;
+            }
+          })();
+        } else {
+          // Sync method - handle synchronously (span creation will be async but don't wait)
+          client
+            .startSpan(spanName, options.spanOptions)
+            .then((span: any) => {
+              // Capture method arguments as attributes
+              if (captureArgs) {
+                const paramNames = getParameterNames(originalMethod);
+                const attributes: Attributes = {};
+
+                paramNames.forEach((paramName, index) => {
+                  if (!ignoreArgs.has(paramName) && index < args.length) {
+                    const value = args[index];
+                    if (isSerializable(value)) {
+                      attributes[`arg.${paramName}`] = value;
+                    }
+                  }
+                });
+
+                span.setAttributes(attributes);
+              }
+
+              // Capture result as attribute
+              if (captureResult && isSerializable(result)) {
+                span.setAttribute('result', result);
+              }
+
+              span.finish();
+            })
+            .catch(() => {
+              // Ignore span creation errors for sync methods
+            });
+
+          return result;
         }
-
-        await span.finish();
-        return result;
       } catch (error) {
-        await span.finish();
+        // For sync errors, create span to record the error
+        client
+          .startSpan(spanName, options.spanOptions)
+          .then((span: any) => {
+            span.finish();
+          })
+          .catch(() => {});
         throw error;
       }
     } as T;
@@ -197,11 +312,13 @@ export function autoSpan(options: {
 /**
  * Timed decorator - measures execution time and adds it as span attribute
  */
-export function timed(options: {
-  name?: string;
-  unit?: 'ms' | 's';
-  spanOptions?: SpanOptions;
-} = {}) {
+export function timed(
+  options: {
+    name?: string;
+    unit?: 'ms' | 's';
+    spanOptions?: SpanOptions;
+  } = {}
+) {
   return function <T extends (...args: any[]) => any>(
     target: any,
     propertyKey: string | symbol,
@@ -215,31 +332,72 @@ export function timed(options: {
     const spanName = options.name || `${target.constructor.name}.${String(propertyKey)}`;
     const unit = options.unit || 'ms';
 
-    descriptor.value = async function (this: any, ...args: any[]) {
+    descriptor.value = function (this: any, ...args: any[]) {
       const client = getGlobalClient();
-      const span = await client.startSpan(spanName, options.spanOptions);
-
       const startTime = performance.now();
 
       try {
-        const result = await client.withSpan(span, async () => {
-          return await originalMethod.apply(this, args);
-        });
+        const result = originalMethod.apply(this, args);
 
-        const endTime = performance.now();
-        const duration = endTime - startTime;
-        const durationValue = unit === 's' ? duration / 1000 : duration;
+        // Check if the result is a Promise (async method)
+        if (result && typeof result.then === 'function') {
+          // Async method
+          return (async () => {
+            const span = await client.startSpan(spanName, options.spanOptions);
 
-        span.setAttribute(`duration_${unit}`, durationValue);
-        await span.finish();
-        return result;
+            try {
+              const resolvedResult = await result;
+
+              const endTime = performance.now();
+              const duration = endTime - startTime;
+              const durationValue = unit === 's' ? duration / 1000 : duration;
+
+              span.setAttribute(`duration_${unit}`, durationValue);
+              await span.finish();
+              return resolvedResult;
+            } catch (error) {
+              const endTime = performance.now();
+              const duration = endTime - startTime;
+              const durationValue = unit === 's' ? duration / 1000 : duration;
+
+              span.setAttribute(`duration_${unit}`, durationValue);
+              await span.finish();
+              throw error;
+            }
+          })();
+        } else {
+          // Sync method
+          const endTime = performance.now();
+          const duration = endTime - startTime;
+          const durationValue = unit === 's' ? duration / 1000 : duration;
+
+          // Create span asynchronously but don't wait
+          client
+            .startSpan(spanName, options.spanOptions)
+            .then((span: any) => {
+              span.setAttribute(`duration_${unit}`, durationValue);
+              span.finish();
+            })
+            .catch(() => {
+              // Ignore span creation errors for sync methods
+            });
+
+          return result;
+        }
       } catch (error) {
         const endTime = performance.now();
         const duration = endTime - startTime;
         const durationValue = unit === 's' ? duration / 1000 : duration;
 
-        span.setAttribute(`duration_${unit}`, durationValue);
-        await span.finish();
+        // Create span for error recording
+        client
+          .startSpan(spanName, options.spanOptions)
+          .then((span: any) => {
+            span.setAttribute(`duration_${unit}`, durationValue);
+            span.finish();
+          })
+          .catch(() => {});
+
         throw error;
       }
     } as T;
@@ -251,12 +409,14 @@ export function timed(options: {
 /**
  * Retry decorator - adds retry logic with tracing
  */
-export function retry(options: {
-  maxAttempts?: number;
-  delay?: number;
-  backoff?: number;
-  spanOptions?: SpanOptions;
-} = {}) {
+export function retry(
+  options: {
+    maxAttempts?: number;
+    delay?: number;
+    backoff?: number;
+    spanOptions?: SpanOptions;
+  } = {}
+) {
   return function <T extends (...args: any[]) => any>(
     target: any,
     propertyKey: string | symbol,
@@ -308,7 +468,10 @@ export function retry(options: {
       }
 
       span.setAttribute('retry.success', false);
-      span.setAttribute('retry.final_error', lastError instanceof Error ? lastError.message : String(lastError));
+      span.setAttribute(
+        'retry.final_error',
+        lastError instanceof Error ? lastError.message : String(lastError)
+      );
       await span.finish();
       throw lastError;
     } as T;
@@ -320,11 +483,13 @@ export function retry(options: {
 /**
  * Class decorator to automatically trace all methods
  */
-export function traceClass(options: {
-  prefix?: string;
-  excludeMethods?: string[];
-  spanOptions?: SpanOptions;
-} = {}) {
+export function traceClass(
+  options: {
+    prefix?: string;
+    excludeMethods?: string[];
+    spanOptions?: SpanOptions;
+  } = {}
+) {
   return function <T extends { new (...args: any[]): {} }>(constructor: T) {
     const prefix = options.prefix || constructor.name;
     const excludeMethods = new Set(options.excludeMethods || ['constructor']);
@@ -374,9 +539,15 @@ function getParameterNames(func: Function): string[] {
   const match = funcStr.match(/\(([^)]*)\)/);
   if (!match) return [];
 
-  return match[1]
+  const params = match[1];
+  if (!params) return [];
+
+  return params
     .split(',')
-    .map(param => param.trim().split(/\s+/)[0])
+    .map(param => {
+      const trimmed = param.trim();
+      return trimmed.split(/\s+/)[0] || '';
+    })
     .filter(param => param && param !== '...');
 }
 
@@ -394,10 +565,13 @@ function isSerializable(value: any): boolean {
   }
 
   if (Array.isArray(value)) {
-    return value.length <= 10 && value.every(item => {
-      const itemType = typeof item;
-      return itemType === 'string' || itemType === 'number' || itemType === 'boolean';
-    });
+    return (
+      value.length <= 10 &&
+      value.every(item => {
+        const itemType = typeof item;
+        return itemType === 'string' || itemType === 'number' || itemType === 'boolean';
+      })
+    );
   }
 
   return false;
@@ -453,4 +627,3 @@ export async function withSpan<T>(
     throw error;
   }
 }
-

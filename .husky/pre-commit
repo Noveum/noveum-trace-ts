@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+echo "🔍 Running pre-commit checks..."
+
+# Run lint-staged for automatic fixing and formatting
+echo "🔧 Running lint-staged (ESLint + Prettier)..."
+npx lint-staged
+
+# Verify that all files are properly formatted and linted
+echo "🔍 Verifying code quality..."
+npm run lint
+
+# Check formatting consistency
+echo "📝 Checking formatting..."
+npm run format:check
+
+# Run build to ensure runtime code compiles
+echo "🏗️ Running build..."
+npm run build
+
+# Run type checking
+echo "🔧 Running TypeScript type checking..."
+npm run typecheck
+
+echo "✅ Pre-commit checks completed!"

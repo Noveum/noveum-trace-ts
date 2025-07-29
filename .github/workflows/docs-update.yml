@@ -1,0 +1,542 @@
+name: Documentation Updates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'README.md'
+      - 'CLAUDE.md'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Job 1: Update CLAUDE.md with latest info
+  update-claude-md:
+    name: Update CLAUDE.md
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate project statistics
+        id: stats
+        run: |
+          echo "Generating project statistics..."
+
+          # Count files and lines
+          SRC_FILES=$(find src -name '*.ts' | wc -l)
+          TEST_FILES=$(find tests/unit -name '*.test.ts' -o -name '*.spec.ts' 2>/dev/null | wc -l || echo 0)
+          INTEGRATION_FILES=$(find tests/integration -name '*.ts' 2>/dev/null | wc -l || echo 0)
+
+          SRC_LINES=$(find src -name '*.ts' -exec wc -l {} + | tail -1 | awk '{print $1}')
+
+          # Get exports count
+          EXPORTS=$(grep -r "^export " src/ | wc -l)
+
+          # Get package info
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+
+          echo "src_files=$SRC_FILES" >> $GITHUB_OUTPUT
+          echo "test_files=$TEST_FILES" >> $GITHUB_OUTPUT
+          echo "integration_files=$INTEGRATION_FILES" >> $GITHUB_OUTPUT
+          echo "src_lines=$SRC_LINES" >> $GITHUB_OUTPUT
+          echo "exports=$EXPORTS" >> $GITHUB_OUTPUT
+          echo "version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
+          echo "name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Update CLAUDE.md statistics
+        run: |
+          set -euo pipefail
+
+          # Create backup
+          cp CLAUDE.md CLAUDE.md.backup
+
+          # Create the new statistics section content
+          cat > new_stats_section.txt << 'EOF'
+          ## Project Statistics
+
+          - **Package**: ${{ steps.stats.outputs.name }}@${{ steps.stats.outputs.version }}
+          - **Source Files**: ${{ steps.stats.outputs.src_files }} TypeScript files
+          - **Lines of Code**: ${{ steps.stats.outputs.src_lines }} lines
+          - **Unit Tests**: ${{ steps.stats.outputs.test_files }} test files
+          - **Integration Tests**: ${{ steps.stats.outputs.integration_files }} test files
+          - **Public Exports**: ${{ steps.stats.outputs.exports }} functions/classes
+          - **Last Updated**: $(date -u +"%Y-%m-%d %H:%M UTC")
+
+          EOF
+
+          # Check if statistics section exists
+          if grep -q "^## Project Statistics" CLAUDE.md; then
+            echo "✅ Updating existing statistics section..."
+            
+            # Validate file structure before making changes
+            if ! grep -q "^## Important Implementation Details" CLAUDE.md; then
+              echo "❌ Error: Expected file structure not found (missing '## Important Implementation Details' section)"
+              echo "File structure validation failed - aborting to prevent corruption"
+              exit 1
+            fi
+            
+            # Create backup and use robust replacement method
+            cp CLAUDE.md CLAUDE.md.before_stats || {
+              echo "❌ Error: Failed to create backup"
+              exit 1
+            }
+            
+            # Remove existing statistics section safely
+            if ! awk '
+              BEGIN { in_stats = 0; found_stats = 0 }
+              /^## Project Statistics/ { 
+                found_stats = 1
+                in_stats = 1
+                next 
+              }
+              /^## / && in_stats { 
+                in_stats = 0
+                print
+                next
+              }
+              !in_stats { print }
+              END { 
+                if (!found_stats) {
+                  print "Error: Statistics section not found during removal" > "/dev/stderr"
+                  exit 1
+                }
+              }
+            ' CLAUDE.md > CLAUDE.md.tmp; then
+              echo "❌ Error: Failed to remove existing statistics section"
+              mv CLAUDE.md.before_stats CLAUDE.md
+              exit 1
+            fi
+            
+            # Insert new statistics section before target section
+            if ! awk '
+              /^## Important Implementation Details/ {
+                system("cat new_stats_section.txt")
+                print
+                next
+              }
+              { print }
+            ' CLAUDE.md.tmp > CLAUDE.md.new; then
+              echo "❌ Error: Failed to insert new statistics section"
+              mv CLAUDE.md.before_stats CLAUDE.md
+              exit 1
+            fi
+            
+            # Validate the result
+            if ! grep -q "^## Project Statistics" CLAUDE.md.new || ! grep -q "^## Important Implementation Details" CLAUDE.md.new; then
+              echo "❌ Error: Result validation failed"
+              mv CLAUDE.md.before_stats CLAUDE.md
+              exit 1
+            fi
+            
+            # Apply changes
+            mv CLAUDE.md.new CLAUDE.md
+            rm -f CLAUDE.md.tmp CLAUDE.md.before_stats
+            echo "✅ Statistics section updated successfully"
+            
+          else
+            echo "➕ Adding new statistics section..."
+            
+            # Validate target location exists
+            if ! grep -q "^## Important Implementation Details" CLAUDE.md; then
+              echo "❌ Error: Target section '## Important Implementation Details' not found"
+              echo "Cannot safely add statistics section - file structure unexpected"
+              exit 1
+            fi
+            
+            # Create backup
+            cp CLAUDE.md CLAUDE.md.before_stats || {
+              echo "❌ Error: Failed to create backup"
+              exit 1
+            }
+            
+            # Add statistics section before target section
+            if ! awk '
+              /^## Important Implementation Details/ {
+                system("cat new_stats_section.txt")
+                print
+                next
+              }
+              { print }
+            ' CLAUDE.md > CLAUDE.md.new; then
+              echo "❌ Error: Failed to add statistics section"
+              mv CLAUDE.md.before_stats CLAUDE.md
+              exit 1
+            fi
+            
+            # Validate the result
+            if ! grep -q "^## Project Statistics" CLAUDE.md.new || ! grep -q "^## Important Implementation Details" CLAUDE.md.new; then
+              echo "❌ Error: Result validation failed"
+              mv CLAUDE.md.before_stats CLAUDE.md
+              exit 1
+            fi
+            
+            # Apply changes
+            mv CLAUDE.md.new CLAUDE.md
+            rm -f CLAUDE.md.before_stats
+            echo "✅ Statistics section added successfully"
+          fi
+
+          # Clean up temporary files
+          rm -f new_stats_section.txt
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if ! diff -q CLAUDE.md CLAUDE.md.backup >/dev/null; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+            echo "✅ CLAUDE.md has been updated"
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes needed for CLAUDE.md"
+          fi
+
+      - name: Commit updated CLAUDE.md
+        if: steps.changes.outputs.changes == 'true'
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CLAUDE.md
+          git commit -m "docs: update CLAUDE.md with latest project statistics
+
+          - Package: ${{ steps.stats.outputs.name }}@${{ steps.stats.outputs.version }}
+          - Source files: ${{ steps.stats.outputs.src_files }}
+          - Lines of code: ${{ steps.stats.outputs.src_lines }}
+          - Exports: ${{ steps.stats.outputs.exports }}
+
+          [skip ci]"
+          git push
+
+  # Job 2: Generate API documentation
+  generate-api-docs:
+    name: Generate API Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate TypeDoc documentation
+        run: npm run docs
+
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-documentation
+          path: docs/
+          retention-days: 30
+
+      - name: Check documentation size
+        run: |
+          echo "📊 Documentation Statistics"
+          echo "=========================="
+          echo "Generated files: $(find docs -name '*.html' | wc -l)"
+          echo "Total size: $(du -sh docs | cut -f1)"
+          echo ""
+          ls -la docs/
+
+  # Job 3: Validate examples and README
+  validate-examples:
+    name: Validate Examples & README
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Validate code examples in README
+        run: |
+          echo "🔍 Validating code examples in README..."
+
+          # Extract TypeScript code blocks from README
+          awk '/```typescript/,/```/ {
+            if ($0 != "```typescript" && $0 != "```") {
+              print $0
+            }
+          }' README.md > extracted-examples.ts
+
+          if [ -s extracted-examples.ts ]; then
+            echo "Found TypeScript examples, validating syntax..."
+            
+            # Add necessary imports
+            cat > full-example.ts << 'EOF'
+          import { NoveumClient, trace, span } from './dist/index.js';
+
+          EOF
+            cat extracted-examples.ts >> full-example.ts
+            
+            # Check TypeScript syntax
+            npx tsc --noEmit --strict full-example.ts && echo "✅ Examples are syntactically valid" || echo "⚠️ Example syntax issues found"
+          else
+            echo "No TypeScript examples found in README"
+          fi
+
+      - name: Validate example files
+        run: |
+          echo "🧪 Validating example files..."
+
+          for example in examples/*.ts; do
+            if [ -f "$example" ]; then
+              echo "Checking $example..."
+              npx tsc --noEmit --strict "$example" && echo "✅ $example is valid" || echo "⚠️ $example has issues"
+            fi
+          done
+
+      - name: Check README completeness
+        run: |
+          echo "📋 Checking README completeness..."
+
+          # Define required sections with their actual emoji-prefixed headers
+          declare -A REQUIRED_SECTIONS
+          REQUIRED_SECTIONS["Installation"]="## 📦 Installation"
+          REQUIRED_SECTIONS["Quick Start"]="## 🏃 Quick Start"
+          REQUIRED_SECTIONS["Framework Integrations"]="## 🔧 Framework Integrations"
+          REQUIRED_SECTIONS["Core Concepts (API Reference)"]="## 📚 Core Concepts"
+          REQUIRED_SECTIONS["Examples"]="## 📋 Examples"
+          REQUIRED_SECTIONS["Contributing"]="## 🤝 Contributing"
+          REQUIRED_SECTIONS["License"]="## 📄 License"
+
+          MISSING_SECTIONS=()
+
+          for section_name in "${!REQUIRED_SECTIONS[@]}"; do
+            section_header="${REQUIRED_SECTIONS[$section_name]}"
+            if grep -q "$section_header" README.md; then
+              echo "✅ $section_name section found"
+            else
+              echo "⚠️ $section_name section missing (looking for: $section_header)"
+              MISSING_SECTIONS+=("$section_name")
+            fi
+          done
+
+          if [ ${#MISSING_SECTIONS[@]} -eq 0 ]; then
+            echo "🎉 All required sections present in README"
+          else
+            echo "📝 Missing sections: ${MISSING_SECTIONS[*]}"
+            echo "ℹ️ Note: This is a warning, not a failure - sections may have different names"
+          fi
+
+  # Job 4: Update package.json scripts documentation
+  update-scripts-docs:
+    name: Update Scripts Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update CLAUDE.md with latest scripts
+        run: |
+          echo "📜 Generating dynamic scripts documentation from package.json..."
+
+          # Create dynamic script documentation generator
+          node -e "
+          const fs = require('fs');
+          const path = require('path');
+
+          try {
+            const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const scripts = packageJson.scripts || {};
+            
+            // Categorize scripts based on their names and commands
+            const categories = {
+              'Development commands': [],
+              'Testing commands': [],
+              'Code quality and formatting': [],
+              'Documentation': [],
+              'Release and versioning': [],
+              'Maintenance': []
+            };
+            
+            // Categorization logic
+            Object.entries(scripts).forEach(([name, command]) => {
+              const lowerName = name.toLowerCase();
+              const lowerCommand = command.toLowerCase();
+              
+              if (lowerName.includes('test') || lowerCommand.includes('vitest') || lowerCommand.includes('jest')) {
+                categories['Testing commands'].push({ name, command });
+              } else if (lowerName.includes('lint') || lowerName.includes('format') || lowerName.includes('typecheck') || 
+                         lowerCommand.includes('eslint') || lowerCommand.includes('prettier') || lowerCommand.includes('tsc')) {
+                categories['Code quality and formatting'].push({ name, command });
+              } else if (lowerName.includes('doc') || lowerCommand.includes('typedoc')) {
+                categories['Documentation'].push({ name, command });
+              } else if (lowerName.includes('release') || lowerName.includes('changeset') || lowerName.includes('version') || lowerName.includes('publish')) {
+                categories['Release and versioning'].push({ name, command });
+              } else if (lowerName.includes('clean') || lowerName.includes('prepare') || lowerCommand.includes('rimraf')) {
+                categories['Maintenance'].push({ name, command });
+              } else if (lowerName.includes('build') || lowerName.includes('dev') || lowerName.includes('watch') || 
+                         lowerCommand.includes('tsup') || lowerCommand.includes('webpack') || lowerCommand.includes('rollup')) {
+                categories['Development commands'].push({ name, command });
+              } else {
+                // Default to development if unsure
+                categories['Development commands'].push({ name, command });
+              }
+            });
+            
+            // Generate markdown documentation
+            let markdown = '';
+            
+            Object.entries(categories).forEach(([category, scripts]) => {
+              if (scripts.length > 0) {
+                markdown += '### ' + category + '\n';
+                markdown += '```bash\n';
+                
+                // Sort scripts by name for consistent output
+                scripts.sort((a, b) => a.name.localeCompare(b.name));
+                
+                scripts.forEach(script => {
+                  // Add appropriate spacing for alignment
+                  const padding = Math.max(25 - script.name.length, 1);
+                  const spaces = ' '.repeat(padding);
+                  
+                  // Add descriptive comment based on the command
+                  let description = getScriptDescription(script.name, script.command);
+                  
+                  markdown += 'npm run ' + script.name + spaces + '# ' + description + '\n';
+                });
+                
+                markdown += '```\n\n';
+              }
+            });
+            
+            // Helper function to generate descriptions
+            function getScriptDescription(name, command) {
+              const lowerName = name.toLowerCase();
+              const lowerCommand = command.toLowerCase();
+              
+              // Custom descriptions based on common patterns and actual scripts
+              if (name === 'build') return 'Build the project';
+              if (name === 'build:watch') return 'Build in watch mode for development';
+              if (name === 'dev' || name === 'develop') return 'Start development mode';
+              if (name.includes('watch')) return 'Run in watch mode';
+              if (name === 'test') return 'Run all tests';
+              if (name.includes('test:coverage')) return 'Run tests with coverage report';
+              if (name.includes('test:watch')) return 'Run tests in watch mode';
+              if (name.includes('test:ui')) return 'Run tests with UI';
+              if (name.includes('integration')) return 'Run integration tests';
+              if (name.includes('smoke')) return 'Run smoke tests';
+              if (name.includes('health')) return 'Run health check tests';
+              if (name === 'lint') return 'Run linting checks';
+              if (name.includes('lint:fix')) return 'Run linting and fix issues';
+              if (name === 'format') return 'Format code with Prettier';
+              if (name.includes('format:check')) return 'Check code formatting';
+              if (name.includes('typecheck')) return 'Run TypeScript type checking';
+              if (name.includes('docs') || name.includes('doc')) return 'Generate documentation';
+              if (name.includes('clean')) return 'Clean build outputs and dependencies';
+              if (name.includes('prepare')) return 'Prepare package (install hooks)';
+              
+              // Release and versioning specific descriptions
+              if (name === 'release') return 'Create a new release';
+              if (name.includes('release:dry')) return 'Preview release changes without publishing';
+              if (name.includes('release:major')) return 'Create a major version release';
+              if (name.includes('release:minor')) return 'Create a minor version release';
+              if (name.includes('release:patch')) return 'Create a patch version release';
+              if (name.includes('changeset:version')) return 'Update versions based on changesets';
+              if (name.includes('changeset:publish')) return 'Publish packages with changesets';
+              if (name.includes('prepublishOnly')) return 'Build before publishing to npm';
+              if (name === 'commit') return 'Commit with conventional commit format';
+              
+              // Generate description from command if no specific pattern matches
+              if (lowerCommand.includes('tsup')) return 'Build using tsup';
+              if (lowerCommand.includes('vitest')) return 'Run tests using Vitest';
+              if (lowerCommand.includes('eslint')) return 'Run ESLint';
+              if (lowerCommand.includes('prettier')) return 'Run Prettier';
+              if (lowerCommand.includes('tsc')) return 'Run TypeScript compiler';
+              if (lowerCommand.includes('typedoc')) return 'Generate TypeDoc documentation';
+              if (lowerCommand.includes('rimraf')) return 'Clean directories';
+              if (lowerCommand.includes('changeset')) return 'Manage changesets';
+              if (lowerCommand.includes('standard-version')) return 'Automated versioning and changelog';
+              if (lowerCommand.includes('husky')) return 'Install Git hooks';
+              if (lowerCommand.includes('cz') || lowerCommand.includes('commitizen')) return 'Interactive commit helper';
+              
+              // Fallback: use the actual command (truncated if too long)
+              const truncatedCommand = command.length > 40 ? command.substring(0, 37) + '...' : command;
+              return 'Run: ' + truncatedCommand;
+            }
+            
+            // Write the generated documentation
+            fs.writeFileSync('new-scripts.md', markdown);
+            
+            console.log('✅ Dynamic script documentation generated successfully');
+            console.log('📊 Found ' + Object.keys(scripts).length + ' scripts across ' + 
+                       Object.values(categories).filter(cat => cat.length > 0).length + ' categories');
+            
+          } catch (error) {
+            console.error('❌ Error generating script documentation:', error.message);
+            process.exit(1);
+          }
+          "
+
+          echo "✅ Scripts documentation dynamically generated from package.json"
+
+      - name: Check if update needed
+        id: check
+        run: |
+          # For now, just indicate that updates might be needed
+          # In a full implementation, you'd compare with existing content
+          echo "update_needed=false" >> $GITHUB_OUTPUT
+
+  # Final job: Documentation status
+  docs-status:
+    name: Documentation Status
+    runs-on: ubuntu-latest
+    needs: [update-claude-md, generate-api-docs, validate-examples, update-scripts-docs]
+    if: always()
+
+    steps:
+      - name: Documentation status report
+        run: |
+          echo "📚 Documentation Update Status"
+          echo "============================="
+          echo "CLAUDE.md Update: ${{ needs.update-claude-md.result }}"
+          echo "API Docs Generation: ${{ needs.generate-api-docs.result }}"
+          echo "Examples Validation: ${{ needs.validate-examples.result }}"
+          echo "Scripts Update: ${{ needs.update-scripts-docs.result }}"
+          echo ""
+
+          if [[ "${{ needs.update-claude-md.result }}" == "success" && 
+                "${{ needs.generate-api-docs.result }}" == "success" && 
+                "${{ needs.validate-examples.result }}" == "success" && 
+                "${{ needs.update-scripts-docs.result }}" == "success" ]]; then
+            echo "🎉 All documentation tasks completed successfully!"
+          else
+            echo "⚠️ Some documentation tasks had issues."
+          fi

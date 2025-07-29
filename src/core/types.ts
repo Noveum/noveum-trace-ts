@@ -47,8 +47,8 @@ export type Attributes = Record<string, AttributeValue>;
  */
 export interface TraceEvent {
   name: string;
-  timestamp: Date;
-  attributes?: Attributes;
+  timestamp: string;
+  attributes: Attributes | undefined;
 }
 
 /**
@@ -157,13 +157,6 @@ export interface NoveumClientOptions {
    * Sampling configuration
    */
   sampling?: SamplingConfig;
-}
-
-/**
- * Batch of traces to send to the API
- */
-export interface TraceBatch {
-  traces: any[];
 }
 
 /**
@@ -290,20 +283,29 @@ export interface FastifyIntegrationOptions {
 }
 
 /**
+ * Serialized event for transport
+ */
+export interface SerializedEvent {
+  name: string;
+  timestamp: string;
+  attributes: Attributes | undefined;
+}
+
+/**
  * Serialized span data for transport
  */
 export interface SerializedSpan {
   traceId: string;
   spanId: string;
-  parentSpanId?: string;
+  parentSpanId: string | undefined;
   name: string;
   kind: SpanKind;
   startTime: string;
-  endTime?: string;
+  endTime: string | undefined;
   status: SpanStatus;
-  statusMessage?: string;
+  statusMessage: string | undefined;
   attributes: Attributes;
-  events: TraceEvent[];
+  events: SerializedEvent[];
   links: SpanLink[];
 }
 
@@ -314,8 +316,8 @@ export interface SerializedTrace {
   traceId: string;
   name: string;
   startTime: string;
-  endTime?: string;
-  level: TraceLevel;
+  endTime: string | undefined;
+  status: SpanStatus;
   attributes: Attributes;
   events: TraceEvent[];
   spans: SerializedSpan[];
@@ -325,7 +327,7 @@ export interface SerializedTrace {
  * Batch of traces for transport
  */
 export interface TraceBatch {
-  traces: SerializedTrace[];
+  traces: SerializedSpan[] | SerializedTrace[];
   metadata: {
     project: string;
     environment: string;
@@ -338,7 +340,10 @@ export interface TraceBatch {
  * Error types for the SDK
  */
 export class NoveumError extends Error {
-  constructor(message: string, public readonly code?: string) {
+  constructor(
+    message: string,
+    public readonly code?: string
+  ) {
     super(message);
     this.name = 'NoveumError';
   }
@@ -364,7 +369,6 @@ export class InstrumentationError extends NoveumError {
     this.name = 'InstrumentationError';
   }
 }
-
 
 /**
  * Sampling rule for conditional sampling
@@ -405,4 +409,3 @@ export interface SamplingConfig {
    */
   rules?: SamplingRule[];
 }
-

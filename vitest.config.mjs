@@ -4,14 +4,22 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-    exclude: ['node_modules', 'dist', '.idea', '.git', '.cache'],
+    setupFiles: ['./tests/setup.ts'],
+    include: ['tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    exclude: [
+      'node_modules', 
+      'dist', 
+      '.idea', 
+      '.git', 
+      '.cache',
+      'tests/integration/**/*.test.ts' // Exclude integration tests that are standalone runners
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       exclude: [
         'node_modules/',
-        'test/',
+        'tests/',
         'dist/',
         '**/*.d.ts',
         '**/*.config.{js,ts}',

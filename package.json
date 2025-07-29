@@ -1,10 +1,29 @@
 {
   "name": "@noveum/trace",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "TypeScript SDK for tracing LLM, RAG, and agent applications with Noveum",
-  "main": "dist/index.js",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
+  "keywords": [
+    "tracing",
+    "observability",
+    "llm",
+    "ai",
+    "monitoring",
+    "typescript",
+    "nodejs",
+    "nextjs",
+    "hono",
+    "express"
+  ],
+  "homepage": "https://github.com/Noveum/noveum-trace-typescript#readme",
+  "bugs": {
+    "url": "https://github.com/Noveum/noveum-trace-typescript/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Noveum/noveum-trace-typescript.git"
+  },
+  "license": "Apache-2.0",
+  "author": "Noveum Team",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -27,6 +46,9 @@
       "require": "./dist/integrations/hono.js"
     }
   },
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
   "files": [
     "dist",
     "README.md",
@@ -35,75 +57,107 @@
   "scripts": {
     "build": "tsup",
     "build:watch": "tsup --watch",
+    "changeset:publish": "changeset publish",
+    "changeset:version": "changeset version",
+    "clean": "rimraf dist",
+    "commit": "cz",
     "dev": "tsup --watch",
-    "test": "vitest",
-    "test:watch": "vitest --watch",
-    "test:coverage": "vitest --coverage",
-    "test:ui": "vitest --ui",
-    "lint": "eslint src --ext .ts,.tsx",
-    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "docs": "typedoc",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,json,md}\"",
-    "typecheck": "tsc --noEmit",
-    "docs": "typedoc",
-    "clean": "rimraf dist",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "prepare": "husky",
     "prepublishOnly": "npm run clean && npm run build",
-    "release": "changeset publish",
-    "version": "changeset version"
+    "release": "standard-version",
+    "release:dry": "standard-version --dry-run",
+    "release:major": "standard-version --release-as major",
+    "release:minor": "standard-version --release-as minor",
+    "release:patch": "standard-version --release-as patch",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "test:health": "NODE_ENV=test npx tsx tests/integration/run-integration-tests.ts health",
+    "test:integration": "NODE_ENV=test npx tsx tests/integration/run-integration-tests.ts",
+    "test:integration:api": "NODE_ENV=test npx tsx tests/integration/api-integration.test.ts",
+    "test:integration:framework": "NODE_ENV=test npx tsx tests/integration/framework-integration.test.ts",
+    "test:smoke": "NODE_ENV=test npx tsx tests/integration/run-integration-tests.ts smoke",
+    "test:ui": "vitest --ui",
+    "test:watch": "vitest --watch",
+    "typecheck": "tsc --noEmit"
   },
-  "keywords": [
-    "tracing",
-    "observability",
-    "llm",
-    "ai",
-    "monitoring",
-    "typescript",
-    "nodejs",
-    "nextjs",
-    "hono",
-    "express"
-  ],
-  "author": "Noveum Team",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Noveum/noveum-trace-typescript.git"
+  "lint-staged": {
+    "src/**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ],
+    "package.json": [
+      "sort-package-json",
+      "prettier --write"
+    ]
   },
-  "bugs": {
-    "url": "https://github.com/Noveum/noveum-trace-typescript/issues"
-  },
-  "homepage": "https://github.com/Noveum/noveum-trace-typescript#readme",
-  "engines": {
-    "node": ">=18.0.0"
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
   },
   "dependencies": {
+    "dotenv": "^17.2.1",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.27.1",
-    "@types/node": "^20.10.5",
-    "@types/uuid": "^9.0.7",
-    "@typescript-eslint/eslint-plugin": "^6.15.0",
-    "@typescript-eslint/parser": "^6.15.0",
-    "@vitest/coverage-v8": "^1.1.0",
-    "@vitest/ui": "^1.1.0",
-    "eslint": "^8.56.0",
+    "@changesets/cli": "^2.27.9",
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "@eslint/js": "^9.16.0",
+    "@types/node": "^22.10.2",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/ui": "^3.2.4",
+    "audit-ci": "^7.1.0",
+    "commitizen": "^4.3.1",
+    "cz-conventional-changelog": "^3.3.0",
+    "eslint": "^9.16.0",
     "eslint-config-prettier": "^9.1.0",
-    "eslint-plugin-prettier": "^5.1.0",
-    "prettier": "^3.1.1",
-    "rimraf": "^5.0.5",
-    "tsup": "^8.0.1",
-    "typedoc": "^0.25.4",
-    "typescript": "^5.3.3",
-    "vitest": "^1.1.0"
+    "eslint-plugin-prettier": "^5.2.1",
+    "globals": "^16.3.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.2",
+    "prettier": "^3.4.2",
+    "rimraf": "^6.0.1",
+    "sort-package-json": "^2.12.0",
+    "standard-version": "^9.5.0",
+    "tsup": "^8.3.5",
+    "tsx": "^4.7.0",
+    "typedoc": "^0.27.4",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
   },
   "peerDependencies": {
+    "express": ">=4.0.0",
+    "hono": ">=3.0.0",
+    "next": ">=12.0.0",
     "typescript": ">=4.9.0"
   },
   "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    },
     "typescript": {
       "optional": true
     }
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
-

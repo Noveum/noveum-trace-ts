@@ -27,6 +27,30 @@ export function getCurrentTimestamp(): string {
 }
 
 /**
+ * Format timestamp to match Python SDK format
+ * Python uses: "2025-07-28T11:39:59.305103" (microsecond precision, no Z suffix)
+ * JavaScript native: "2025-07-28T15:40:05.753Z" (millisecond precision, with Z suffix)
+ */
+export function formatPythonCompatibleTimestamp(date: Date = new Date()): string {
+  const isoString = date.toISOString();
+
+  // Remove the 'Z' suffix and add microsecond precision
+  const withoutZ = isoString.slice(0, -1); // Remove 'Z'
+
+  // Convert milliseconds to microseconds by adding three zeros
+  // e.g., "2025-07-28T15:40:05.753" -> "2025-07-28T15:40:05.753000"
+  const parts = withoutZ.split('.');
+  if (parts.length === 2) {
+    const [datePart, milliseconds] = parts;
+    const microseconds = (milliseconds || '').padEnd(6, '0');
+    return `${datePart}.${microseconds}`;
+  }
+
+  // Fallback: add .000000 if no decimal part
+  return `${withoutZ}.000000`;
+}
+
+/**
  * Validate attribute value
  */
 export function isValidAttributeValue(value: unknown): value is AttributeValue {
@@ -82,7 +106,10 @@ export function deepMerge<T extends Record<string, unknown>>(target: T, source: 
       typeof targetValue === 'object' &&
       !Array.isArray(targetValue)
     ) {
-      result[key] = deepMerge(targetValue as Record<string, unknown>, sourceValue as Record<string, unknown>) as T[Extract<keyof T, string>];
+      result[key] = deepMerge(
+        targetValue as Record<string, unknown>,
+        sourceValue as Record<string, unknown>
+      ) as T[Extract<keyof T, string>];
     } else if (sourceValue !== undefined) {
       result[key] = sourceValue as T[Extract<keyof T, string>];
     }
@@ -111,7 +138,7 @@ export function truncateString(str: string, maxLength: number): string {
   if (str.length <= maxLength) {
     return str;
   }
-  return str.substring(0, maxLength - 3) + '...';
+  return `${str.substring(0, maxLength - 3)}...`;
 }
 
 /**
@@ -121,7 +148,7 @@ export function safeStringify(obj: unknown, maxDepth = 10): string {
   const seen = new WeakSet();
   let depth = 0;
 
-  return JSON.stringify(obj, (key, value) => {
+  return JSON.stringify(obj, (_key, value) => {
     if (depth >= maxDepth) {
       return '[Max Depth Reached]';
     }
@@ -220,12 +247,7 @@ export async function retry<T>(
     backoffFactor?: number;
   } = {}
 ): Promise<T> {
-  const {
-    maxRetries = 3,
-    baseDelay = 1000,
-    maxDelay = 30000,
-    backoffFactor = 2,
-  } = options;
+  const { maxRetries = 3, baseDelay = 1000, maxDelay = 30000, backoffFactor = 2 } = options;
 
   let lastError: Error;
 
@@ -265,15 +287,15 @@ export function isNode(): boolean {
  * Check if running in browser environment
  */
 export function isBrowser(): boolean {
-  return typeof window !== 'undefined' && typeof document !== 'undefined';
+  return typeof globalThis !== 'undefined' && 'window' in globalThis && 'document' in globalThis;
 }
 
 /**
- * Get SDK version from package.json
+ * Get SDK version from build-time injected constant
  */
 export function getSdkVersion(): string {
-  // This will be replaced during build process
-  return '0.1.0';
+  // Provided at build time by tsup; fallback to '1.0.0' if undefined
+  return typeof __SDK_VERSION__ !== 'undefined' ? __SDK_VERSION__ : '1.0.0';
 }
 
 /**
@@ -309,11 +331,16 @@ export function extractErrorInfo(error: unknown): {
   stack?: string;
 } {
   if (error instanceof Error) {
-    return {
+    const result: { message: string; name: string; stack?: string } = {
       message: error.message,
       name: error.name,
-      stack: error.stack,
     };
+
+    if (error.stack) {
+      result.stack = error.stack;
+    }
+
+    return result;
   }
 
   return {
@@ -321,4 +348,3 @@ export function extractErrorInfo(error: unknown): {
     name: 'Unknown',
   };
 }
-

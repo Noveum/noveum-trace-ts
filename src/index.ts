@@ -1,14 +1,14 @@
 /**
  * Noveum Trace TypeScript SDK
- * 
+ *
  * A high-performance TypeScript SDK for tracing LLM, RAG, and agent applications
  * with comprehensive observability features.
  */
 
 // Core exports
 export { NoveumClient } from './core/client.js';
-export { Span } from './core/span.js';
-export { Trace } from './core/trace.js';
+export { StandaloneSpan as Span } from './core/span-standalone.js';
+export { StandaloneTrace as Trace } from './core/trace-standalone.js';
 
 // Type exports
 export type {
@@ -34,7 +34,7 @@ export type {
   NextjsIntegrationOptions,
   HonoIntegrationOptions,
   FastifyIntegrationOptions,
-  
+
   // Core types
   AttributeValue,
   Attributes,
@@ -46,7 +46,7 @@ export type {
   SerializedSpan,
   SerializedTrace,
   TraceBatch,
-  
+
   // Error types
   NoveumError,
   ConfigurationError,
@@ -58,18 +58,10 @@ export type {
 export { SpanStatus, SpanKind, TraceLevel } from './core/types.js';
 
 // Sampling
-export {
-  Sampler,
-  AlwaysSampler,
-  NeverSampler,
-  RateSampler,
-} from './core/sampler.js';
+export { Sampler, AlwaysSampler, NeverSampler, RateSampler } from './core/sampler.js';
 
 // Types
-export type {
-  SamplingConfig,
-  SamplingRule,
-} from './core/types.js';
+export type { SamplingConfig, SamplingRule } from './core/types.js';
 
 // Context management exports
 export {
@@ -91,9 +83,7 @@ export {
   createTransport,
 } from './transport/http-transport.js';
 
-export type {
-  HttpTransportConfig,
-} from './transport/http-transport.js';
+export type { HttpTransportConfig } from './transport/http-transport.js';
 
 // Decorator exports
 export {
@@ -113,6 +103,7 @@ export {
   generateTraceId,
   generateSpanId,
   getCurrentTimestamp,
+  formatPythonCompatibleTimestamp,
   isValidAttributeValue,
   sanitizeAttributes,
   deepMerge,
@@ -135,14 +126,16 @@ export {
 /**
  * Create and configure a new Noveum client
  */
-export function createClient(options?: import('./core/types.js').NoveumClientOptions): import('./core/client.js').NoveumClient {
+export function createClient(
+  options: Partial<import('./core/types.js').NoveumClientOptions> & { apiKey: string }
+): import('./core/client.js').NoveumClient {
   const { NoveumClient } = require('./core/client.js');
   const client = new NoveumClient(options);
-  
+
   // Set as global client for decorators
   const { setGlobalClient } = require('./decorators/index.js');
   setGlobalClient(client);
-  
+
   return client;
 }
 
@@ -156,7 +149,17 @@ let defaultClient: import('./core/client.js').NoveumClient | undefined;
  */
 export function getDefaultClient(): import('./core/client.js').NoveumClient {
   if (!defaultClient) {
-    defaultClient = createClient();
+    // Try to create client from environment variables
+    const apiKey = process.env.NOVEUM_API_KEY || 'default-api-key';
+    const project = process.env.NOVEUM_PROJECT || 'default-project';
+    const environment = process.env.NOVEUM_ENVIRONMENT || 'development';
+
+    defaultClient = createClient({
+      apiKey,
+      project,
+      environment,
+      enabled: true,
+    });
   }
   return defaultClient;
 }
@@ -177,14 +180,20 @@ export function setDefaultClient(client: import('./core/client.js').NoveumClient
 /**
  * Start a new trace using the default client
  */
-export async function startTrace(name: string, options?: import('./core/types.js').TraceOptions): Promise<import('./core/trace.js').Trace> {
+export async function startTrace(
+  name: string,
+  options?: import('./core/types.js').TraceOptions
+): Promise<import('./core/trace-standalone.js').StandaloneTrace> {
   return getDefaultClient().createTrace(name, options);
 }
 
 /**
  * Start a new span using the default client
  */
-export async function startSpan(name: string, options?: import('./core/types.js').SpanOptions): Promise<import('./core/span.js').Span> {
+export async function startSpan(
+  name: string,
+  options?: import('./core/types.js').SpanOptions
+): Promise<import('./core/span-standalone.js').StandaloneSpan> {
   return getDefaultClient().startSpan(name, options);
 }
 
@@ -199,6 +208,12 @@ export async function traceFunction<T>(
   const trace = await getDefaultClient().createTrace(name, options);
   try {
     return await fn();
+  } catch (error) {
+    trace.addEvent('error', {
+      'error.type': error instanceof Error ? error.constructor.name : 'Error',
+      'error.message': error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   } finally {
     await trace.finish();
   }
@@ -215,6 +230,12 @@ export async function spanFunction<T>(
   const span = await getDefaultClient().startSpan(name, options);
   try {
     return await fn();
+  } catch (error) {
+    span.addEvent('error', {
+      'error.type': error instanceof Error ? error.constructor.name : 'Error',
+      'error.message': error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   } finally {
     await span.finish();
   }
@@ -253,4 +274,3 @@ export const SDK_INFO = {
   description: 'TypeScript SDK for tracing LLM, RAG, and agent applications',
   homepage: 'https://github.com/Noveum/noveum-trace-typescript',
 } as const;
-
