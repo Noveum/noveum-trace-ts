@@ -4,6 +4,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Build Status](https://github.com/Noveum/noveum-trace-ts/workflows/CI/badge.svg)](https://github.com/Noveum/noveum-trace-ts/actions)
+[![codecov](https://codecov.io/gh/Noveum/noveum-trace-ts/graph/badge.svg?token=2tpjQ648B5)](https://codecov.io/gh/Noveum/noveum-trace-ts)
 
 The official TypeScript SDK for [Noveum.ai](https://noveum.ai) - a powerful tracing and observability platform for LLM applications, RAG systems, and AI agents.
 
