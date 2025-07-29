@@ -1,9 +1,14 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+### 1.0.1 (2025-07-29)
+
+### 🐛 Bug Fixes
+
+- fix tests ([237a824](https://github.com/Noveum/noveum-trace-typescript/commit/237a824066427b2a114bdd9eb16576c4e5890105))
+- fix tests and update SDK ([603a26d](https://github.com/Noveum/noveum-trace-typescript/commit/603a26d591b67e6645016eb9d98ce8aea1710a0c))
+- update documentation coverage checks to match emoji-prefixed README headers ([1397f7d](https://github.com/Noveum/noveum-trace-typescript/commit/1397f7d209bfe018d254d12319de5672e312ba19))
 
 ## [1.0.0] - 2025-07-28
 
