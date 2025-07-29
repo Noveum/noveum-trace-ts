@@ -317,7 +317,7 @@ export interface SerializedTrace {
   name: string;
   startTime: string;
   endTime: string | undefined;
-  status: string;
+  status: SpanStatus;
   attributes: Attributes;
   events: TraceEvent[];
   spans: SerializedSpan[];

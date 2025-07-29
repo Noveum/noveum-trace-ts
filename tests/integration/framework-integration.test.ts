@@ -25,6 +25,13 @@ if (skipIntegrationTests) {
   process.exit(0);
 }
 
+/**
+ * Safely formats error messages for type safety
+ */
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 interface FrameworkTestResult {
   name: string;
   success: boolean;
@@ -139,9 +146,9 @@ class FrameworkIntegrationTestSuite {
           this.results.push({
             name: 'Express.js Middleware',
             success: false,
-            error: error.message
+            error: formatError(error)
           });
-          console.log(`   ❌ Express middleware failed: ${error.message}`);
+          console.log(`   ❌ Express middleware failed: ${formatError(error)}`);
         }
       });
 
@@ -152,9 +159,9 @@ class FrameworkIntegrationTestSuite {
       this.results.push({
         name: 'Express.js Middleware',
         success: false,
-        error: error.message
+        error: formatError(error)
       });
-      console.log(`   ❌ Express integration failed: ${error.message}`);
+      console.log(`   ❌ Express integration failed: ${formatError(error)}`);
     }
   }
 
@@ -222,9 +229,9 @@ class FrameworkIntegrationTestSuite {
       this.results.push({
         name: 'Next.js Integration', 
         success: false,
-        error: error.message
+        error: formatError(error)
       });
-      console.log(`   ❌ Next.js integration failed: ${error.message}`);
+      console.log(`   ❌ Next.js integration failed: ${formatError(error)}`);
     }
   }
 
@@ -302,9 +309,9 @@ class FrameworkIntegrationTestSuite {
       this.results.push({
         name: 'Hono Integration',
         success: false,
-        error: error.message
+        error: formatError(error)
       });
-      console.log(`   ❌ Hono integration failed: ${error.message}`);
+      console.log(`   ❌ Hono integration failed: ${formatError(error)}`);
     }
   }
 
@@ -369,12 +376,12 @@ class FrameworkIntegrationTestSuite {
           this.results.push({
             name: 'Manual HTTP Tracing',
             success: false,
-            error: error.message
+            error: formatError(error)
           });
           
           res.statusCode = 500;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ error: error.message }));
+          res.end(JSON.stringify({ error: formatError(error) }));
         }
       });
 
@@ -385,22 +392,30 @@ class FrameworkIntegrationTestSuite {
       this.results.push({
         name: 'Manual HTTP Tracing',
         success: false,
-        error: error.message
+        error: formatError(error)
       });
-      console.log(`   ❌ Manual HTTP tracing failed: ${error.message}`);
+      console.log(`   ❌ Manual HTTP tracing failed: ${formatError(error)}`);
     }
   }
 
   private async startServer(server: http.Server, name: string): Promise<void> {
     return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error(`${name} server failed to start within 5 seconds`));
+      }, 5000);
+
       server.listen(0, 'localhost', () => {
+        clearTimeout(timeout);
         this.servers.push(server);
         const address = server.address() as AddressInfo;
         console.log(`   🚀 ${name} server started on http://localhost:${address.port}`);
         resolve();
       });
 
-      server.on('error', reject);
+      server.on('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
     });
   }
 
@@ -433,7 +448,7 @@ class FrameworkIntegrationTestSuite {
             console.log(`   📄 Response: ${JSON.stringify(response, null, 2)}`);
             resolve();
           } catch (error) {
-            reject(new Error(`Failed to parse response: ${error.message}`));
+            reject(new Error(`Failed to parse response: ${formatError(error)}`));
           }
         });
       });
@@ -490,17 +505,39 @@ class FrameworkIntegrationTestSuite {
   }
 
   private async cleanup(): Promise<void> {
+    const errors: Error[] = [];
+    
     // Close all servers
     for (const server of this.servers) {
-      await new Promise<void>((resolve) => {
-        server.close(() => resolve());
-      });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Server close timeout'));
+          }, 5000);
+          
+          server.close((err) => {
+            clearTimeout(timeout);
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      } catch (error) {
+        errors.push(error instanceof Error ? error : new Error(String(error)));
+      }
     }
 
     // Flush final traces and shutdown client
     if (this.client) {
-      await this.client.flush();
-      await this.client.shutdown();
+      try {
+        await this.client.flush();
+        await this.client.shutdown();
+      } catch (error) {
+        errors.push(error instanceof Error ? error : new Error(String(error)));
+      }
+    }
+    
+    if (errors.length > 0) {
+      console.error('Cleanup errors:', errors);
     }
   }
 }

@@ -12,15 +12,43 @@ import { config } from 'dotenv';
 // Load environment variables
 config();
 
+/**
+ * Safely formats error messages for type safety
+ */
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 const API_KEY = process.env.NOVEUM_API_KEY;
 const PROJECT = process.env.NOVEUM_PROJECT || 'noveum-trace-ts';
 const ENVIRONMENT = process.env.NOVEUM_ENVIRONMENT || 'integration-test';
+
+/**
+ * Safely format API key for logging with minimal exposure
+ */
+function formatApiKeyForLogging(apiKey: string | undefined): string {
+  if (!apiKey) {
+    return 'Not provided';
+  }
+  
+  // Option to completely disable API key logging in CI/CD
+  if (process.env.DISABLE_API_KEY_LOGGING === 'true') {
+    return 'Hidden (DISABLE_API_KEY_LOGGING=true)';
+  }
+  
+  // Show only minimal portion: first 4 chars and last 2 chars
+  if (apiKey.length < 8) {
+    return '***'; // Too short to safely expose any portion
+  }
+  
+  return `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 2)}`;
+}
 
 async function runAllIntegrationTests() {
   console.log('🎯 Noveum Trace TypeScript SDK - Complete Integration Test Suite');
   console.log('=' .repeat(70));
   console.log(`📅 Test Run: ${new Date().toISOString()}`);
-  console.log(`🔑 API Key: ${API_KEY ? `${API_KEY.substring(0, 10)}...${API_KEY.substring(API_KEY.length - 5)}` : 'Not provided'}`);
+  console.log(`🔑 API Key: ${formatApiKeyForLogging(API_KEY)}`);
   console.log(`📂 Project: ${PROJECT}`);
   console.log(`🌍 Environment: ${ENVIRONMENT}`);
   console.log('=' .repeat(70));
@@ -58,7 +86,7 @@ async function runAllIntegrationTests() {
     console.log('\n✅ All integration test phases completed successfully!');
 
   } catch (error) {
-    console.error('\n💥 Integration tests failed:', error.message);
+    console.error('\n💥 Integration tests failed:', formatError(error));
     allTestsPassed = false;
   }
 
@@ -104,7 +132,7 @@ export async function healthCheck(): Promise<boolean> {
     
     return config.project === PROJECT;
   } catch (error) {
-    console.error('Health check failed:', error.message);
+    console.error('Health check failed:', formatError(error));
     return false;
   }
 }
@@ -154,7 +182,7 @@ export async function smokeTest(): Promise<boolean> {
     console.log('✅ Smoke test passed');
     return true;
   } catch (error) {
-    console.error('💨 Smoke test failed:', error.message);
+    console.error('💨 Smoke test failed:', formatError(error));
     return false;
   }
 }
@@ -182,7 +210,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       
     default:
       runAllIntegrationTests().catch(error => {
-        console.error('Test runner failed:', error);
+        console.error('Test runner failed:', formatError(error));
         process.exit(1);
       });
   }

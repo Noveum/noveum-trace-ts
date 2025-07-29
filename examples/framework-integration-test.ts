@@ -69,11 +69,10 @@ async function testExpressIntegration() {
     });
     
     // Create middleware
-    const middleware = noveumMiddleware({
-      client,
-      captureRequest: true,
-      captureResponse: true,
-      spanName: (req: any) => `${req.method} ${req.path}`
+    const middleware = noveumMiddleware(client, {
+      captureHeaders: true,
+      captureBody: true,
+      getSpanName: (req: any) => `${req.method} ${req.path}`
     });
     
     console.log('✅ Express middleware created');
@@ -134,8 +133,7 @@ async function testNextJSIntegration() {
     // Wrap with tracing
     const tracedHandler = withNoveumTracing(originalHandler, {
       client,
-      spanName: 'nextjs-api-handler',
-      captureRequest: true
+      getSpanName: () => 'nextjs-api-handler'
     });
     
     console.log('✅ Next.js handler wrapped with tracing');

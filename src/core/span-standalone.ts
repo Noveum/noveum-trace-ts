@@ -13,7 +13,7 @@ import type {
   SpanLink,
 } from './types.js';
 import { SpanKind, SpanStatus } from './types.js';
-import { sanitizeAttributes, extractErrorInfo } from '../utils/index.js';
+import { sanitizeAttributes, extractErrorInfo, generateSpanId } from '../utils/index.js';
 
 interface ExtendedSpanOptions extends SpanOptions {
   traceId: string;
@@ -90,7 +90,7 @@ export class StandaloneSpan implements ISpan {
     return this._kind;
   }
 
-  get status(): string {
+  get status(): SpanStatus {
     return this._status;
   }
 
@@ -214,11 +214,7 @@ export class StandaloneSpan implements ISpan {
       enabled: this._enabled,
     };
 
-    const childSpan = new StandaloneSpan(
-      Math.random().toString(36).substr(2, 16),
-      name,
-      childOptions
-    );
+    const childSpan = new StandaloneSpan(generateSpanId(), name, childOptions);
 
     return childSpan;
   }

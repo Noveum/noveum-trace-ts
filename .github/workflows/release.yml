@@ -52,7 +52,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: Noveum/noveum-trace-ts
-          file: ./coverage/lcov.info
+          files: ./coverage/lcov.info
           flags: release-validation
           name: codecov-release
 
@@ -326,26 +326,22 @@ jobs:
           git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }}"
           git push
 
+      - name: Get package info
+        id: package
+        run: |
+          PACKAGE_FILE=$(ls *.tgz)
+          echo "file=$PACKAGE_FILE" >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.new_version }}
-          release_name: ${{ steps.version.outputs.new_version }}
+          name: ${{ steps.version.outputs.new_version }}
           body_path: release_notes.md
           draft: false
           prerelease: ${{ contains(github.event.inputs.release_type, 'pre') }}
-
-      - name: Upload release assets
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.package.outputs.file }}
-          asset_name: ${{ steps.package.outputs.file }}
-          asset_content_type: application/gzip
+          files: |
+            ${{ steps.package.outputs.file }}
 
   # Job 6: Post-Release Notifications
   notify:
@@ -355,6 +351,9 @@ jobs:
     if: always() && (needs.publish-npm.result == 'success' || needs.github-release.result == 'success')
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Get package info
         id: package
         run: |

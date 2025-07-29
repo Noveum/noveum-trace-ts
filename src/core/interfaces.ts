@@ -52,6 +52,11 @@ export interface ISpan {
   readonly isFinished: boolean;
 
   /**
+   * Status of the span
+   */
+  readonly status: SpanStatus;
+
+  /**
    * Set multiple attributes on the span
    * @param attributes - Key-value pairs to set as attributes
    */
@@ -153,14 +158,14 @@ export interface ITrace {
 
   /**
    * Set the trace status
-   * @param status - Status string (e.g., 'OK', 'ERROR')
+   * @param status - Status value
    */
-  setStatus(status: string): void;
+  setStatus(status: SpanStatus): void;
 
   /**
    * Get the trace status
    */
-  getStatus(): string;
+  getStatus(): SpanStatus;
 
   /**
    * Finish the trace

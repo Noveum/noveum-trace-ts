@@ -8,6 +8,7 @@ import { StandaloneSpan as Span } from './span-standalone.js';
 import { HttpTransport } from '../transport/http-transport.js';
 import { getGlobalContextManager } from '../context/context-manager.js';
 import { Sampler } from './sampler.js';
+import { generateSpanId } from '../utils/index.js';
 
 /**
  * Default client configuration
@@ -359,7 +360,7 @@ export class NoveumClient {
    * Generate a unique ID
    */
   private _generateId(): string {
-    return Math.random().toString(36).substr(2, 16);
+    return generateSpanId();
   }
 }
 

@@ -100,7 +100,7 @@ export interface NextjsTracingOptions extends NextjsIntegrationOptions {
 /**
  * Wrap Next.js App Router API route handler with tracing
  */
-export function withNoveumTracing(
+export function withNoveumTrace(
   handler: AppRouteHandler,
   client: INoveumClient,
   options: NextjsTracingOptions = {}
@@ -482,4 +482,26 @@ export function createTracedPagesRoute(
   options?: NextjsTracingOptions
 ): PagesApiHandler {
   return withNoveumTracePages(handler, client, options);
+}
+
+/**
+ * Wrapper function for withNoveumTrace that matches test expectations
+ */
+export function withNoveumTracing(
+  handler: AppRouteHandler,
+  options: { client: INoveumClient } & NextjsTracingOptions = {} as any
+): AppRouteHandler {
+  const { client, ...traceOptions } = options;
+  return withNoveumTrace(handler, client, traceOptions);
+}
+
+/**
+ * Wrapper function for withNoveumTracePages that matches test expectations
+ */
+export function withNoveumPagesTracing(
+  handler: PagesApiHandler,
+  options: { client: INoveumClient } & NextjsTracingOptions = {} as any
+): PagesApiHandler {
+  const { client, ...traceOptions } = options;
+  return withNoveumTracePages(handler, client, traceOptions);
 }

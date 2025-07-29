@@ -109,10 +109,9 @@ jobs:
           if [ -f coverage/lcov.info ]; then
             echo "✅ Coverage report generated"
             
-            # Extract coverage percentage if available
-            if command -v lcov >/dev/null; then
-              lcov --summary coverage/lcov.info 2>/dev/null | grep -E "lines\.\.\.\.\.\." || echo "Coverage summary not available"
-            fi
+            # Extract coverage percentage using awk
+            COVERAGE_DATA=$(awk -F: '/^SF:/ {files++} /^DA:/ {split($2,a,","); total++; if(a[2]>0) covered++} END {if(total>0) printf "%.1f", (covered/total)*100; else print "0"}' coverage/lcov.info)
+            echo "Test coverage: ${COVERAGE_DATA}%"
           else
             echo "⚠️ No coverage report found"
           fi
@@ -123,7 +122,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: Noveum/noveum-trace-ts
-          file: ./coverage/lcov.info
+          files: ./coverage/lcov.info
           flags: maintenance
           name: codecov-maintenance
 
@@ -299,12 +298,16 @@ jobs:
           "
 
       - name: API connectivity check
-        if: ${{ secrets.NOVEUM_API_KEY }}
         env:
           NOVEUM_API_KEY: ${{ secrets.NOVEUM_API_KEY }}
           NOVEUM_PROJECT: 'maintenance-health-check'
           NOVEUM_ENVIRONMENT: 'github-actions'
         run: |
+          if [ -z "$NOVEUM_API_KEY" ]; then
+            echo "⏭️ Skipping API connectivity check - no API key provided"
+            exit 0
+          fi
+
           echo "🌐 Testing API connectivity..."
 
           # Create a simple connectivity test

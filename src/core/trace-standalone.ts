@@ -13,7 +13,7 @@ import type {
   SerializedTrace,
   SerializedSpan,
 } from './types.js';
-import { TraceLevel as TraceLevelEnum } from './types.js';
+import { TraceLevel as TraceLevelEnum, SpanStatus } from './types.js';
 import { sanitizeAttributes, formatPythonCompatibleTimestamp } from '../utils/index.js';
 
 interface ExtendedTraceOptions extends TraceOptions {
@@ -38,7 +38,7 @@ export class StandaloneTrace implements ITrace {
   private _spans: SerializedSpan[] = [];
   private _spanObjects: ISpan[] = []; // Track live span objects for tests
   private _isFinished = false;
-  private _status = 'OK';
+  private _status: SpanStatus = SpanStatus.OK;
 
   constructor(traceId: string, name: string, options: ExtendedTraceOptions = {}) {
     this._traceId = traceId;
@@ -135,7 +135,7 @@ export class StandaloneTrace implements ITrace {
   /**
    * Set the trace status
    */
-  setStatus(status: string): void {
+  setStatus(status: SpanStatus): void {
     if (this._isFinished) {
       console.warn('Cannot set status on a finished trace');
       return;
@@ -147,7 +147,7 @@ export class StandaloneTrace implements ITrace {
   /**
    * Get the trace status
    */
-  getStatus(): string {
+  getStatus(): SpanStatus {
     return this._status;
   }
 
@@ -224,7 +224,7 @@ export class StandaloneTrace implements ITrace {
 
     // Count error spans (spans with error status)
     const errorSpanCount = this._spanObjects.filter(
-      span => 'status' in span && span.status === 'ERROR'
+      span => 'status' in span && span.status === SpanStatus.ERROR
     ).length;
 
     return {

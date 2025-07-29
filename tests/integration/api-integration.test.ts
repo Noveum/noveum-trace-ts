@@ -17,6 +17,13 @@ import { join } from 'path';
 // Load environment variables
 config();
 
+/**
+ * Safely formats error messages for type safety
+ */
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 const API_KEY = process.env.NOVEUM_API_KEY;
 const PROJECT = process.env.NOVEUM_PROJECT || 'noveum-trace-ts';
 const ENVIRONMENT = process.env.NOVEUM_ENVIRONMENT || 'integration-test';
@@ -79,14 +86,14 @@ class IntegrationTestSuite {
       return result;
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.log(`   ❌ Failed (${duration}ms): ${error.message}`);
+      console.log(`   ❌ Failed (${duration}ms): ${formatError(error)}`);
       
       const result: TestResult = { 
         name, 
         success: false, 
         duration, 
-        error: error.message,
-        details: error.stack 
+        error: formatError(error),
+        details: (error as Error).stack 
       };
       this.results.push(result);
       return result;
@@ -393,8 +400,8 @@ class IntegrationTestSuite {
         console.log(`     ⚠️  Authentication failure handled gracefully`);
       } catch (error) {
         // This is expected - authentication should fail
-        if (error.message.includes('401') || error.message.includes('unauthorized')) {
-          console.log(`     ✅ Authentication properly rejected: ${error.message}`);
+        if (formatError(error).includes('401') || formatError(error).includes('unauthorized')) {
+          console.log(`     ✅ Authentication properly rejected: ${formatError(error)}`);
         } else {
           throw error;
         }

@@ -249,7 +249,7 @@ jobs:
       - name: Bundle size check
         run: |
           # Check that main bundle is not too large (< 500KB)
-          MAIN_SIZE=$(stat -c%s dist/index.mjs)
+          MAIN_SIZE=$(wc -c < dist/index.mjs)
           echo "Main bundle size: $MAIN_SIZE bytes"
           if [ $MAIN_SIZE -gt 512000 ]; then
             echo "❌ Main bundle is too large (>500KB)"

@@ -3,6 +3,7 @@ import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
 import prettier from 'eslint-plugin-prettier';
 import prettierConfig from 'eslint-config-prettier';
+import globals from 'globals';
 
 export default [
   js.configs.recommended,
@@ -12,26 +13,14 @@ export default [
       parser: tsparser,
       ecmaVersion: 2022,
       sourceType: 'module',
+      parserOptions: {
+        project: './tsconfig.json',
+      },
       globals: {
+        ...globals.node,
+        ...globals.browser,
         NodeJS: 'readonly',
         RequestInit: 'readonly',
-        console: 'readonly',
-        process: 'readonly',
-        Buffer: 'readonly',
-        __dirname: 'readonly',
-        __filename: 'readonly',
-        global: 'readonly',
-        module: 'readonly',
-        require: 'readonly',
-        exports: 'readonly',
-        setTimeout: 'readonly',
-        clearTimeout: 'readonly',
-        setInterval: 'readonly',
-        clearInterval: 'readonly',
-        fetch: 'readonly',
-        URL: 'readonly',
-        Response: 'readonly',
-        performance: 'readonly',
       },
     },
     plugins: {
@@ -50,8 +39,8 @@ export default [
       '@typescript-eslint/prefer-nullish-coalescing': 'off',
       '@typescript-eslint/prefer-optional-chain': 'off',
       '@typescript-eslint/no-unnecessary-type-assertion': 'off',
-      '@typescript-eslint/no-floating-promises': 'off',
-      '@typescript-eslint/await-thenable': 'off',
+      '@typescript-eslint/no-floating-promises': 'error', // Re-enabled for async safety
+      '@typescript-eslint/await-thenable': 'error', // Re-enabled for async safety
       
       // General rules
       'no-console': 'off', // Relaxed - allow console statements

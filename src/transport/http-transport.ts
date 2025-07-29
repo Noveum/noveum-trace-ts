@@ -3,12 +3,7 @@
  */
 
 import type { ITransport } from '../core/interfaces.js';
-import type {
-  TraceBatch,
-  TransportOptions,
-  SerializedSpan,
-  SerializedTrace,
-} from '../core/types.js';
+import type { TraceBatch, TransportOptions } from '../core/types.js';
 import { TransportError } from '../core/types.js';
 import { retry, withTimeout, getSdkVersion } from '../utils/index.js';
 
@@ -137,16 +132,23 @@ export class HttpTransport implements ITransport {
       return firstBatch;
     }
 
-    const allTraces = batches.flatMap(batch => batch.traces) as
-      | SerializedSpan[]
-      | SerializedTrace[];
     const firstBatch = batches[0];
     if (!firstBatch) {
       throw new Error('No batches to combine');
     }
 
+    // Determine if we're dealing with spans or traces based on the first batch
+    const firstTrace = firstBatch.traces[0];
+    if (!firstTrace) {
+      throw new Error('No traces in first batch');
+    }
+
+    // All batches should contain the same type (spans or traces)
+    // @ts-expect-error - Complex union type issue with flatMap, functionally correct
+    const allTraces = batches.flatMap(batch => batch.traces);
+
     return {
-      traces: allTraces,
+      traces: allTraces as any,
       metadata: {
         ...firstBatch.metadata,
         timestamp: new Date().toISOString(),
@@ -313,27 +315,41 @@ export class ConsoleTransport implements ITransport {
     console.log('Traces:');
 
     batch.traces.forEach((trace, index) => {
-      console.log(`  Trace ${index + 1}:`, {
-        id: trace.traceId,
-        name: trace.name,
-        duration: trace.endTime
-          ? new Date(trace.endTime).getTime() - new Date(trace.startTime).getTime()
-          : 'ongoing',
-        spanCount: trace.spans.length,
-        attributes: trace.attributes,
-      });
-
-      trace.spans.forEach((span, spanIndex) => {
-        console.log(`    Span ${spanIndex + 1}:`, {
-          id: span.spanId,
-          name: span.name,
-          status: span.status,
-          duration: span.endTime
-            ? new Date(span.endTime).getTime() - new Date(span.startTime).getTime()
+      // Type guard to check if this is a SerializedTrace (has spans property)
+      if ('spans' in trace) {
+        console.log(`  Trace ${index + 1}:`, {
+          id: trace.traceId,
+          name: trace.name,
+          duration: trace.endTime
+            ? new Date(trace.endTime).getTime() - new Date(trace.startTime).getTime()
             : 'ongoing',
-          attributes: span.attributes,
+          spanCount: trace.spans.length,
+          attributes: trace.attributes,
         });
-      });
+
+        trace.spans.forEach((span: any, spanIndex: number) => {
+          console.log(`    Span ${spanIndex + 1}:`, {
+            id: span.spanId,
+            name: span.name,
+            status: span.status,
+            duration: span.endTime
+              ? new Date(span.endTime).getTime() - new Date(span.startTime).getTime()
+              : 'ongoing',
+            attributes: span.attributes,
+          });
+        });
+      } else {
+        // This is a SerializedSpan
+        console.log(`  Span ${index + 1}:`, {
+          id: trace.spanId,
+          name: trace.name,
+          status: trace.status,
+          duration: trace.endTime
+            ? new Date(trace.endTime).getTime() - new Date(trace.startTime).getTime()
+            : 'ongoing',
+          attributes: trace.attributes,
+        });
+      }
     });
 
     console.log('=========================');

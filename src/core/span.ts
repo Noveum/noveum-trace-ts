@@ -151,7 +151,7 @@ export class Span implements ISpan {
     this.addEvent('exception', {
       'exception.type': errorInfo.name,
       'exception.message': errorInfo.message,
-      'exception.stacktrace': errorInfo.stack,
+      'exception.stacktrace': errorInfo.stack || '',
     });
 
     // Automatically set span status to ERROR

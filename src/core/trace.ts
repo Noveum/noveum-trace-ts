@@ -10,7 +10,7 @@ import type {
   TraceOptions,
   SerializedTrace,
 } from './types.js';
-import { TraceLevel } from './types.js';
+import { TraceLevel, SpanStatus } from './types.js';
 import { generateTraceId, sanitizeAttributes, getCurrentTimestamp } from '../utils/index.js';
 import { Span } from './span.js';
 
@@ -30,7 +30,7 @@ export class Trace implements ITrace {
   private _spans: ISpan[] = [];
   private _isFinished = false;
   private _activeSpan?: ISpan;
-  private _status = 'OK';
+  private _status: SpanStatus = SpanStatus.OK;
 
   constructor(name: string, options: TraceOptions = {}, transport?: ITransport) {
     this._traceId = generateTraceId();
@@ -87,14 +87,14 @@ export class Trace implements ITrace {
   /**
    * Set the trace status
    */
-  setStatus(status: string): void {
+  setStatus(status: SpanStatus): void {
     this._status = status;
   }
 
   /**
    * Get the trace status
    */
-  getStatus(): string {
+  getStatus(): SpanStatus {
     return this._status;
   }
 
@@ -145,7 +145,7 @@ export class Trace implements ITrace {
 
     const event: TraceEvent = {
       name,
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
       attributes: attributes ? sanitizeAttributes(attributes) : undefined,
     };
 
@@ -192,7 +192,7 @@ export class Trace implements ITrace {
       name: this._name,
       startTime: this._startTime.toISOString(),
       endTime: this._endTime?.toISOString(),
-      level: this._level,
+      status: this._status,
       attributes: { ...this._attributes },
       events: this._events.map(event => ({
         ...event,
@@ -243,14 +243,25 @@ export class Trace implements ITrace {
     duration?: number;
   } {
     const finishedSpans = this._spans.filter(span => span.isFinished);
-    const errorSpans = this._spans.filter(span => span.status === 'ERROR');
+    const errorSpans = this._spans.filter(span => span.status === SpanStatus.ERROR);
 
-    return {
+    const duration = this.getDuration();
+    const result: {
+      spanCount: number;
+      finishedSpanCount: number;
+      errorSpanCount: number;
+      duration?: number;
+    } = {
       spanCount: this._spans.length,
       finishedSpanCount: finishedSpans.length,
       errorSpanCount: errorSpans.length,
-      duration: this.getDuration(),
     };
+
+    if (duration !== undefined) {
+      result.duration = duration;
+    }
+
+    return result;
   }
 
   /**
@@ -340,9 +351,13 @@ export class Trace implements ITrace {
       duration: number | null;
     };
   } {
+    const stats = this.getStats();
     return {
       trace: this.serialize(),
-      stats: this.getStats(),
+      stats: {
+        ...stats,
+        duration: stats.duration ?? null,
+      },
     };
   }
 }
