@@ -37,7 +37,7 @@ export class HttpTransport implements ITransport {
     };
 
     this._httpConfig = httpConfig;
-    this._userAgent = `noveum-trace-typescript/${getSdkVersion()}`;
+    this._userAgent = `noveum-trace-ts/${getSdkVersion()}`;
   }
 
   async send(batch: TraceBatch): Promise<void> {

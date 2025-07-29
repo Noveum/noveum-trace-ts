@@ -32,14 +32,14 @@ This project adheres to a code of conduct that we expect all contributors to fol
 2. Clone your fork locally:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/noveum-trace-typescript.git
-cd noveum-trace-typescript
+git clone https://github.com/YOUR_USERNAME/noveum-trace-ts.git
+cd noveum-trace-ts
 ```
 
 3. Add the upstream repository:
 
 ```bash
-git remote add upstream https://github.com/Noveum/noveum-trace-typescript.git
+git remote add upstream https://github.com/Noveum/noveum-trace-ts.git
 ```
 
 ## Development Setup
@@ -173,7 +173,7 @@ describe('NoveumClient', () => {
   beforeEach(() => {
     client = new NoveumClient({
       apiKey: 'test-key',
-      project: 'test-project'
+      project: 'test-project',
     });
   });
 
@@ -202,11 +202,9 @@ describe('Express Integration', () => {
   it('should trace HTTP requests', async () => {
     const app = express();
     app.use(noveumMiddleware(client));
-    
-    const response = await request(app)
-      .get('/test')
-      .expect(200);
-      
+
+    const response = await request(app).get('/test').expect(200);
+
     // Assert tracing behavior
   });
 });
@@ -301,6 +299,7 @@ type(scope): description
 ```
 
 Types:
+
 - `feat`: New feature
 - `fix`: Bug fix
 - `docs`: Documentation changes
@@ -310,6 +309,7 @@ Types:
 - `chore`: Build/tooling changes
 
 Examples:
+
 ```
 feat(core): add span context propagation
 fix(express): handle async middleware errors
@@ -327,6 +327,7 @@ docs(api): update trace interface documentation
 ### README Updates
 
 Update the main README.md for:
+
 - New features
 - Breaking changes
 - Installation instructions
@@ -334,6 +335,7 @@ Update the main README.md for:
 ### Examples
 
 Add examples for new features:
+
 - Create files in `examples/` directory
 - Include comprehensive comments
 - Test examples to ensure they work
@@ -357,6 +359,7 @@ npm run benchmark
 ### Bundle Size
 
 Keep the bundle size minimal:
+
 - Avoid unnecessary dependencies
 - Use tree-shaking friendly exports
 - Consider code splitting for integrations
@@ -366,6 +369,7 @@ Keep the bundle size minimal:
 ### Versioning
 
 We use semantic versioning (SemVer):
+
 - MAJOR: Breaking changes
 - MINOR: New features (backward compatible)
 - PATCH: Bug fixes (backward compatible)
@@ -409,7 +413,7 @@ Enable debug mode:
 ```typescript
 const client = new NoveumClient({
   // ... config
-  debug: true
+  debug: true,
 });
 ```
 
@@ -419,16 +423,16 @@ Use console transport for local development:
 import { ConsoleTransport } from '@noveum/trace';
 
 const client = new NoveumClient({
-  transport: new ConsoleTransport()
+  transport: new ConsoleTransport(),
 });
 ```
 
 ## Recognition
 
 Contributors will be recognized in:
+
 - CONTRIBUTORS.md file
 - Release notes
 - GitHub contributors page
 
 Thank you for contributing to Noveum Trace TypeScript SDK!
-

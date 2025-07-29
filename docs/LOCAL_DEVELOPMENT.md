@@ -13,8 +13,8 @@ This guide covers everything you need to know for developing, testing, and contr
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/Noveum/noveum-trace-typescript.git
-   cd noveum-trace-typescript
+   git clone https://github.com/Noveum/noveum-trace-ts.git
+   cd noveum-trace-ts
    ```
 
 2. **Install dependencies**

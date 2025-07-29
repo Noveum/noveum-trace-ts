@@ -58,30 +58,30 @@ import './trace-setup'; // Initialize the client
 
 async function myFirstTrace() {
   console.log('🚀 Creating your first trace...');
-  
-  const result = await trace('my-first-trace', async (traceInstance) => {
+
+  const result = await trace('my-first-trace', async traceInstance => {
     // Add some context
     traceInstance.setAttribute('user.id', 'demo-user');
     traceInstance.setAttribute('operation.type', 'demo');
-    
+
     // Create a span for a sub-operation
-    const data = await span('fetch-data', async (spanInstance) => {
+    const data = await span('fetch-data', async spanInstance => {
       spanInstance.setAttribute('data.source', 'demo');
-      
+
       // Simulate some work
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       return { message: 'Hello from Noveum Trace!' };
     });
-    
+
     // Add an event
     traceInstance.addEvent('data-processed', {
       'data.size': JSON.stringify(data).length,
     });
-    
+
     return data;
   });
-  
+
   console.log('✅ Trace completed:', result);
   return result;
 }
@@ -104,11 +104,13 @@ import { client } from './trace-setup';
 const app = express();
 
 // Add Noveum tracing middleware
-app.use(noveumMiddleware({
-  client,
-  captureRequest: true,
-  captureResponse: true,
-}));
+app.use(
+  noveumMiddleware({
+    client,
+    captureRequest: true,
+    captureResponse: true,
+  })
+);
 
 app.get('/api/hello', async (req, res) => {
   // This request is automatically traced
@@ -164,7 +166,7 @@ class UserService {
   async getUser(id: string) {
     return await this.fetchUserFromDB(id);
   }
-  
+
   @span('database-query', { captureArgs: true })
   private async fetchUserFromDB(id: string) {
     // Simulate database query
@@ -203,10 +205,10 @@ export const client = initializeClient({
   apiKey: process.env.NOVEUM_API_KEY!,
   project: process.env.NOVEUM_PROJECT || 'default',
   environment: process.env.NOVEUM_ENVIRONMENT || 'development',
-  
+
   // Enable debug mode in development
   debug: process.env.NODE_ENV === 'development',
-  
+
   // Configure sampling for production
   sampling: {
     rate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
@@ -222,21 +224,20 @@ Add proper error handling to your traces:
 import { trace, span } from '@noveum/trace';
 
 async function riskyOperation() {
-  return await trace('risky-operation', async (traceInstance) => {
+  return await trace('risky-operation', async traceInstance => {
     try {
-      const result = await span('dangerous-task', async (spanInstance) => {
+      const result = await span('dangerous-task', async spanInstance => {
         // Simulate an operation that might fail
         if (Math.random() > 0.7) {
           throw new Error('Something went wrong!');
         }
-        
+
         spanInstance.setAttribute('task.result', 'success');
         return { success: true };
       });
-      
+
       traceInstance.setStatus('OK');
       return result;
-      
     } catch (error) {
       // Handle the error and add context
       traceInstance.setStatus('ERROR', error.message);
@@ -244,7 +245,7 @@ async function riskyOperation() {
         'error.type': error.constructor.name,
         'error.message': error.message,
       });
-      
+
       throw error; // Re-throw if needed
     }
   });
@@ -273,17 +274,20 @@ Now that you have basic tracing set up, explore these advanced features:
 ## Common Issues
 
 ### API Key Not Working
+
 - Verify your API key is correct
 - Check that you're using the right project
 - Ensure the API key has the necessary permissions
 
 ### Traces Not Appearing
+
 - Check your network connection
 - Verify the endpoint URL is correct
 - Enable debug mode to see detailed logs
 - Check for any error messages in the console
 
 ### TypeScript Errors
+
 - Ensure you have the latest version of the SDK
 - Check your TypeScript configuration
 - Verify all required dependencies are installed
@@ -294,8 +298,7 @@ If you run into any issues:
 
 - **📖 Check the [Documentation](https://docs.noveum.ai)**
 - **💬 Join our [Discord Community](https://discord.gg/noveum)**
-- **🐛 Report issues on [GitHub](https://github.com/Noveum/noveum-trace-typescript/issues)**
+- **🐛 Report issues on [GitHub](https://github.com/Noveum/noveum-trace-ts/issues)**
 - **📧 Email us at support@noveum.ai**
 
 Welcome to Noveum Trace! 🎉
-

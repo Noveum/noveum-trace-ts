@@ -132,7 +132,7 @@ class IntegrationTestSuite {
           'test.suite': 'api-integration',
           'test.method': 'single-trace',
           'test.timestamp': formatPythonCompatibleTimestamp(),
-          'sdk.name': 'noveum-trace-typescript',
+          'sdk.name': 'noveum-trace-ts',
           'sdk.version': '1.0.0',
         },
       });

@@ -2,20 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
-### [1.0.2](https://github.com/Noveum/noveum-trace-typescript/compare/v1.0.1...v1.0.2) (2025-07-29)
+### [1.0.2](https://github.com/Noveum/noveum-trace-ts/compare/v1.0.1...v1.0.2) (2025-07-29)
 
 ### 🐛 Bug Fixes
 
-- add missing 'Important Implementation Details' section to CLAUDE.md ([8719f4b](https://github.com/Noveum/noveum-trace-typescript/commit/8719f4bc3394502f0d8938bbf2d786fcfb7d4bf5))
-- fix documentation build ([15fa10c](https://github.com/Noveum/noveum-trace-typescript/commit/15fa10cb04ee3a1d79ec4a9739a095a177c80a25))
+- add missing 'Important Implementation Details' section to CLAUDE.md ([8719f4b](https://github.com/Noveum/noveum-trace-ts/commit/8719f4bc3394502f0d8938bbf2d786fcfb7d4bf5))
+- fix documentation build ([15fa10c](https://github.com/Noveum/noveum-trace-ts/commit/15fa10cb04ee3a1d79ec4a9739a095a177c80a25))
 
 ### 1.0.1 (2025-07-29)
 
 ### 🐛 Bug Fixes
 
-- fix tests ([237a824](https://github.com/Noveum/noveum-trace-typescript/commit/237a824066427b2a114bdd9eb16576c4e5890105))
-- fix tests and update SDK ([603a26d](https://github.com/Noveum/noveum-trace-typescript/commit/603a26d591b67e6645016eb9d98ce8aea1710a0c))
-- update documentation coverage checks to match emoji-prefixed README headers ([1397f7d](https://github.com/Noveum/noveum-trace-typescript/commit/1397f7d209bfe018d254d12319de5672e312ba19))
+- fix tests ([237a824](https://github.com/Noveum/noveum-trace-ts/commit/237a824066427b2a114bdd9eb16576c4e5890105))
+- fix tests and update SDK ([603a26d](https://github.com/Noveum/noveum-trace-ts/commit/603a26d591b67e6645016eb9d98ce8aea1710a0c))
+- update documentation coverage checks to match emoji-prefixed README headers ([1397f7d](https://github.com/Noveum/noveum-trace-ts/commit/1397f7d209bfe018d254d12319de5672e312ba19))
 
 ## [1.0.0] - 2025-07-28
 
@@ -174,8 +174,8 @@ Welcome to the **Noveum Trace TypeScript SDK** - A high-performance TypeScript S
 ### 🔗 Links
 
 - **NPM Package**: [@noveum/trace](https://www.npmjs.com/package/@noveum/trace)
-- **GitHub Repository**: [Noveum/noveum-trace-typescript](https://github.com/Noveum/noveum-trace-typescript)
-- **Documentation**: [API Reference](https://noveum.github.io/noveum-trace-typescript/)
+- **GitHub Repository**: [Noveum/noveum-trace-ts](https://github.com/Noveum/noveum-trace-ts)
+- **Documentation**: [API Reference](https://noveum.github.io/noveum-trace-ts/)
 - **Python SDK**: [Noveum/noveum-trace](https://github.com/Noveum/noveum-trace)
 
 ### 🙏 Acknowledgments

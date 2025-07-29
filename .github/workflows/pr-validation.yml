@@ -25,8 +25,8 @@ jobs:
           # Check if title follows conventional commit format
           TITLE="$PR_TITLE"
 
-          # Define valid prefixes
-          VALID_PREFIXES=("feat" "fix" "docs" "style" "refactor" "test" "chore" "ci" "perf" "build")
+          # Define valid prefixes (including 'deps' for Dependabot)
+          VALID_PREFIXES=("feat" "fix" "docs" "style" "refactor" "test" "chore" "ci" "perf" "build" "deps")
 
           VALID=false
           for prefix in "${VALID_PREFIXES[@]}"; do
@@ -45,14 +45,22 @@ jobs:
             echo "  feat: add new tracing feature"
             echo "  fix(client): resolve connection timeout issue"
             echo "  docs: update API documentation"
+            echo "  deps: bump dependency version"
             exit 1
           fi
 
       - name: Validate PR description
         env:
           PR_DESCRIPTION: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           echo "📝 Validating PR description..."
+
+          # Skip description validation for dependabot PRs
+          if [[ "$PR_AUTHOR" == "dependabot"* ]]; then
+            echo "🤖 Skipping description validation for Dependabot PR"
+            exit 0
+          fi
 
           DESCRIPTION="$PR_DESCRIPTION"
 
@@ -175,7 +183,7 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: Noveum/noveum-trace-typescript
+          slug: Noveum/noveum-trace-ts
           files: ./coverage/lcov.info
           flags: pr-validation
           name: codecov-pr

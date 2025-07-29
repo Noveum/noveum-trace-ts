@@ -25,7 +25,7 @@ async function testPythonCompatibility() {
       'test.type': 'basic',
       'test.language': 'typescript',
       'test.timestamp': formatPythonCompatibleTimestamp(),
-      'sdk.name': 'noveum-trace-typescript',
+      'sdk.name': 'noveum-trace-ts',
       'sdk.version': '1.0.0'
     }
   });
@@ -103,7 +103,7 @@ async function testPythonCompatibility() {
   console.log('\nExpected differences from Python SDK:');
   console.log('1. ✅ Timestamp format: FIXED - Now matches Python exactly (microsecond precision, no Z suffix)');
   console.log('2. ⚠️  Language identifier: "typescript" vs "python"');
-  console.log('3. ⚠️  SDK name: "noveum-trace-typescript" vs "noveum-trace-python"');
+  console.log('3. ⚠️  SDK name: "noveum-trace-ts" vs "noveum-trace-python"');
   console.log('4. ⚠️  Trace ID: Different ID for test identification');
   console.log('\nAll other fields should match exactly! ✅');
 

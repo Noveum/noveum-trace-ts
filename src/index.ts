@@ -272,5 +272,5 @@ export const SDK_INFO = {
   name: '@noveum/trace',
   version: VERSION,
   description: 'TypeScript SDK for tracing LLM, RAG, and agent applications',
-  homepage: 'https://github.com/Noveum/noveum-trace-typescript',
+  homepage: 'https://github.com/Noveum/noveum-trace-ts',
 } as const;
