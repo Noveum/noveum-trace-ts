@@ -39,6 +39,7 @@ export class NoveumClient {
   // private readonly _contextManager: ContextManager;
   private readonly _sampler: Sampler;
   private readonly _pendingSpans: Span[] = [];
+  private readonly _pendingTraces: any[] = [];
   private _flushTimer: NodeJS.Timeout | undefined;
   private _isShutdown = false;
 
@@ -53,16 +54,12 @@ export class NoveumClient {
       apiKey: options.apiKey,
     };
 
-    this._transport = new HttpTransport(
-      {
-        timeout: this._config.timeout,
-        maxRetries: this._config.retryAttempts,
-      },
-      {
-        endpoint: this._config.endpoint,
-        apiKey: this._config.apiKey,
-      }
-    );
+    this._transport = new HttpTransport({
+      endpoint: this._config.endpoint,
+      apiKey: this._config.apiKey,
+      timeout: this._config.timeout,
+      maxRetries: this._config.retryAttempts,
+    });
 
     // this._contextManager = new ContextManager();
     this._sampler = new Sampler(this._config.sampling);
@@ -94,7 +91,7 @@ export class NoveumClient {
       return this._createNoOpTrace(name);
     }
 
-    const traceId = options.traceId || this._generateId();
+    const traceId = options.trace_id || this._generateId();
 
     // Check sampling
     if (!this._sampler.shouldSample(traceId, name)) {
@@ -121,11 +118,11 @@ export class NoveumClient {
    */
   async startSpan(name: string, options: SpanOptions = {}): Promise<Span> {
     if (!this._config.enabled || this._isShutdown) {
-      return this._createNoOpSpan(name, options.traceId || this._generateId());
+      return this._createNoOpSpan(name, options.trace_id || this._generateId());
     }
 
     const spanId = this._generateId();
-    const traceId = options.traceId || this._generateId();
+    const traceId = options.trace_id || this._generateId();
 
     // Check sampling
     if (!this._sampler.shouldSample(traceId, name)) {
@@ -134,7 +131,7 @@ export class NoveumClient {
 
     const span = new Span(spanId, name, {
       ...options,
-      traceId,
+      trace_id: traceId,
       client: this,
     });
 
@@ -168,14 +165,33 @@ export class NoveumClient {
   }
 
   /**
-   * Flush all pending spans
+   * Add a finished trace to the pending queue
    */
-  async flush(): Promise<void> {
-    if (this._pendingSpans.length === 0) {
+  _addFinishedTrace(trace: any): void {
+    if (this._isShutdown) {
       return;
     }
 
-    await this._flushPendingSpans();
+    this._pendingTraces.push(trace);
+
+    if (this._pendingTraces.length >= this._config.batchSize) {
+      this._flushPendingTraces().catch(error => {
+        if (this._config.debug) {
+          console.error('[Noveum] Error flushing traces:', error);
+        }
+      });
+    }
+  }
+
+  /**
+   * Flush all pending spans and traces
+   */
+  async flush(): Promise<void> {
+    if (this._pendingSpans.length === 0 && this._pendingTraces.length === 0) {
+      return;
+    }
+
+    await Promise.all([this._flushPendingSpans(), this._flushPendingTraces()]);
   }
 
   /**
@@ -314,7 +330,7 @@ export class NoveumClient {
   }
 
   /**
-   * Flush pending spans to the transport
+   * Flush pending spans to the transport (group by trace)
    */
   private async _flushPendingSpans(): Promise<void> {
     if (this._pendingSpans.length === 0) {
@@ -327,14 +343,83 @@ export class NoveumClient {
       console.log(`[Noveum] Flushing ${spansToFlush.length} spans`);
     }
 
-    const batch: TraceBatch = {
-      traces: spansToFlush.map(span => span.serialize()),
-      metadata: {
+    // Group spans by trace ID and convert to traces
+    const traceMap = new Map<string, any[]>();
+    spansToFlush.forEach(span => {
+      const serializedSpan = span.serialize();
+      const traceId = serializedSpan.trace_id;
+      if (!traceMap.has(traceId)) {
+        traceMap.set(traceId, []);
+      }
+      traceMap.get(traceId)!.push(serializedSpan);
+    });
+
+    // Convert span groups to trace format
+    const traces = Array.from(traceMap.entries()).map(([traceId, spans]) => {
+      const firstSpan = spans[0];
+      const lastSpan = spans[spans.length - 1];
+
+      return {
+        trace_id: traceId,
+        name: firstSpan.name,
+        start_time: firstSpan.start_time,
+        end_time: lastSpan.end_time,
+        duration_ms: spans.reduce((total, span) => total + span.duration_ms, 0),
+        status: spans.some(span => span.status === 'error') ? 'error' : 'ok',
+        status_message: null,
+        span_count: spans.length,
+        error_count: spans.filter(span => span.status === 'error').length,
+        attributes: firstSpan.attributes,
+        metadata: {
+          user_id: null,
+          session_id: null,
+          request_id: null,
+          tags: {},
+          custom_attributes: {},
+        },
+        spans,
+        sdk: {
+          name: 'noveum-trace-ts',
+          version: getSdkVersion(),
+        },
         project: this._config.project,
         environment: this._config.environment,
-        timestamp: new Date().toISOString(),
-        sdkVersion: getSdkVersion(),
-      },
+        updated_at: new Date().toISOString(),
+      };
+    });
+
+    const batch: TraceBatch = {
+      traces,
+      timestamp: Date.now() / 1000,
+    };
+
+    try {
+      await this._transport.send(batch);
+    } catch (error) {
+      if (this._config.debug) {
+        console.error('[Noveum] Failed to send batch:', error);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Flush pending traces to the transport
+   */
+  private async _flushPendingTraces(): Promise<void> {
+    if (this._pendingTraces.length === 0) {
+      return;
+    }
+
+    const tracesToFlush = this._pendingTraces.splice(0);
+
+    if (this._config.debug) {
+      console.log(`[Noveum] Flushing ${tracesToFlush.length} traces`);
+    }
+
+    const batch: TraceBatch = {
+      traces: tracesToFlush.map(trace => trace.serialize()),
+      timestamp: Date.now() / 1000,
     };
 
     try {
@@ -362,7 +447,7 @@ export class NoveumClient {
    */
   private _createNoOpSpan(name: string, traceId: string): Span {
     return new Span(this._generateId(), name, {
-      traceId,
+      trace_id: traceId,
       client: this,
       enabled: false,
     });

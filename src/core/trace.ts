@@ -9,14 +9,10 @@ import type {
   TraceEvent,
   TraceOptions,
   SerializedTrace,
+  TraceBatch,
 } from './types.js';
 import { TraceLevel, SpanStatus } from './types.js';
-import {
-  generateTraceId,
-  sanitizeAttributes,
-  getCurrentTimestamp,
-  getSdkVersion,
-} from '../utils/index.js';
+import { generateTraceId, sanitizeAttributes } from '../utils/index.js';
 import { Span } from './span.js';
 
 /**
@@ -41,7 +37,7 @@ export class Trace implements ITrace {
     this._traceId = generateTraceId();
     this._name = name;
     this._level = options.level ?? TraceLevel.INFO;
-    this._startTime = options.startTime ?? new Date();
+    this._startTime = options.start_time ?? new Date();
     this._transport = transport;
 
     if (options.attributes) {
@@ -109,8 +105,8 @@ export class Trace implements ITrace {
     }
 
     // If no parent span ID is specified and we have an active span, use it as parent
-    if (!options.parentSpanId && this._activeSpan && !this._activeSpan.isFinished) {
-      options.parentSpanId = this._activeSpan.spanId;
+    if (!options.parent_span_id && this._activeSpan && !this._activeSpan.isFinished) {
+      options.parent_span_id = this._activeSpan.spanId;
     }
 
     const span = new Span(this, name, options);
@@ -180,12 +176,13 @@ export class Trace implements ITrace {
       await Promise.all(unfinishedSpans.map(span => span.finish(this._endTime)));
     }
 
-    this._isFinished = true;
-
-    // Calculate total duration and add as attribute
+    // Calculate total duration and add as attribute before marking as finished
     const duration = this._endTime.getTime() - this._startTime.getTime();
     this.setAttribute('duration_ms', duration);
     this.setAttribute('span_count', this._spans.length);
+
+    // Now mark as finished
+    this._isFinished = true;
 
     // Send the trace data if transport is available
     if (this._transport) {
@@ -198,18 +195,34 @@ export class Trace implements ITrace {
   }
 
   serialize(): SerializedTrace {
+    const endTime = this._endTime || new Date();
+    const duration = endTime.getTime() - this._startTime.getTime();
+
     return {
-      traceId: this._traceId,
+      trace_id: this._traceId,
       name: this._name,
-      startTime: this._startTime.toISOString(),
-      endTime: this._endTime?.toISOString(),
+      start_time: this._startTime.toISOString(),
+      end_time: this._endTime?.toISOString() || null,
+      duration_ms: duration,
       status: this._status,
+      status_message: null,
+      span_count: this._spans.length,
+      error_count: this._spans.filter(span => span.status === 'error').length,
       attributes: { ...this._attributes },
-      events: this._events.map(event => ({
-        ...event,
-        timestamp: event.timestamp,
-      })),
+      metadata: {
+        user_id: null,
+        session_id: null,
+        request_id: null,
+        tags: {},
+        custom_attributes: {},
+      },
       spans: this._spans.map(span => span.serialize()),
+      sdk: {
+        name: 'noveum-trace-ts',
+        version: '1.0.0',
+      },
+      project: 'default',
+      environment: 'development',
     };
   }
 
@@ -315,7 +328,7 @@ export class Trace implements ITrace {
       name,
       {
         ...options,
-        parentTraceId: this._traceId,
+        parent_trace_id: this._traceId,
       },
       this._transport
     );
@@ -326,14 +339,9 @@ export class Trace implements ITrace {
       return;
     }
 
-    const batch = {
+    const batch: TraceBatch = {
       traces: [this.serialize()],
-      metadata: {
-        project: 'default', // This should come from client configuration
-        environment: 'development', // This should come from client configuration
-        timestamp: getCurrentTimestamp(),
-        sdkVersion: getSdkVersion(),
-      },
+      timestamp: Math.floor(Date.now() / 1000), // Unix timestamp in seconds
     };
 
     await this._transport.send(batch);

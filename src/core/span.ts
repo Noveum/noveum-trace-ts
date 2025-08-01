@@ -31,10 +31,10 @@ export class Span implements ISpan {
     this._trace = trace;
     this._spanId = generateSpanId();
     this._traceId = trace.traceId;
-    this._parentSpanId = options.parentSpanId;
+    this._parentSpanId = options.parent_span_id;
     this._name = name;
     this._kind = options.kind ?? SpanKind.INTERNAL;
-    this._startTime = options.startTime ?? new Date();
+    this._startTime = options.start_time ?? new Date();
     this._links = options.links ?? [];
 
     if (options.attributes) {
@@ -173,16 +173,18 @@ export class Span implements ISpan {
     }
 
     this._endTime = endTime ?? new Date();
-    this._isFinished = true;
 
     // If status is still UNSET, set it to OK
     if (this._status === SpanStatus.UNSET) {
       this._status = SpanStatus.OK;
     }
 
-    // Calculate duration and add as attribute
+    // Calculate duration and add as attribute before marking as finished
     const duration = this._endTime.getTime() - this._startTime.getTime();
     this.setAttribute('duration_ms', duration);
+
+    // Now mark as finished
+    this._isFinished = true;
 
     // Notify the trace that this span has finished
     // This allows the trace to potentially flush or perform cleanup
@@ -194,22 +196,30 @@ export class Span implements ISpan {
   }
 
   serialize(): SerializedSpan {
+    const endTime = this._endTime || new Date();
+    const duration = endTime.getTime() - this._startTime.getTime();
+
     return {
-      traceId: this._traceId,
-      spanId: this._spanId,
-      parentSpanId: this._parentSpanId,
+      trace_id: this._traceId,
+      span_id: this._spanId,
+      parent_span_id: this._parentSpanId || null,
       name: this._name,
-      kind: this._kind,
-      startTime: this._startTime.toISOString(),
-      endTime: this._endTime?.toISOString(),
+      start_time: this._startTime.toISOString(),
+      end_time: this._endTime?.toISOString() || null,
+      duration_ms: duration,
       status: this._status,
-      statusMessage: this._statusMessage,
+      status_message: this._statusMessage || null,
       attributes: { ...this._attributes },
       events: this._events.map(event => ({
         ...event,
         timestamp: event.timestamp,
+        attributes: event.attributes || {},
       })),
-      links: [...this._links],
+      links: this._links.map(link => ({
+        trace_id: link.context.trace_id,
+        span_id: link.context.span_id,
+        attributes: link.attributes || {},
+      })),
     };
   }
 
@@ -222,7 +232,7 @@ export class Span implements ISpan {
   ): Promise<ISpan> {
     return this._trace.startSpan(name, {
       ...options,
-      parentSpanId: this._spanId,
+      parent_span_id: this._spanId,
     });
   }
 

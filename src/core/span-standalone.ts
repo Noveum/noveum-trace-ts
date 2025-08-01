@@ -13,10 +13,15 @@ import type {
   SpanLink,
 } from './types.js';
 import { SpanKind, SpanStatus } from './types.js';
-import { sanitizeAttributes, extractErrorInfo, generateSpanId } from '../utils/index.js';
+import {
+  sanitizeAttributes,
+  extractErrorInfo,
+  generateSpanId,
+  formatPythonCompatibleTimestamp,
+} from '../utils/index.js';
 
 interface ExtendedSpanOptions extends SpanOptions {
-  traceId: string;
+  trace_id: string;
   client?: any;
   enabled?: boolean;
 }
@@ -44,11 +49,11 @@ export class StandaloneSpan implements ISpan {
 
   constructor(spanId: string, name: string, options: ExtendedSpanOptions) {
     this._spanId = spanId;
-    this._traceId = options.traceId;
-    this._parentSpanId = options.parentSpanId;
+    this._traceId = options.trace_id;
+    this._parentSpanId = options.parent_span_id;
     this._name = name;
     this._kind = options.kind ?? SpanKind.INTERNAL;
-    this._startTime = options.startTime ?? new Date();
+    this._startTime = options.start_time ?? new Date();
     this._links = options.links ?? [];
     this._client = options.client;
     this._enabled = options.enabled !== false;
@@ -153,7 +158,7 @@ export class StandaloneSpan implements ISpan {
 
     const event: TraceEvent = {
       name,
-      timestamp: new Date().toISOString(),
+      timestamp: formatPythonCompatibleTimestamp(new Date()),
       attributes: attributes ? sanitizeAttributes(attributes) : {},
     };
     this._events.push(event);
@@ -214,8 +219,8 @@ export class StandaloneSpan implements ISpan {
   ): Promise<StandaloneSpan> {
     const childOptions: ExtendedSpanOptions = {
       ...options,
-      traceId: this._traceId,
-      parentSpanId: this._spanId,
+      trace_id: this._traceId,
+      parent_span_id: this._spanId,
       client: this._client,
       enabled: this._enabled,
     };
@@ -262,17 +267,8 @@ export class StandaloneSpan implements ISpan {
     // Now mark as finished
     this._isFinished = true;
 
-    // Notify client that this span has finished
-    if (this._client && this._enabled && '_addFinishedSpan' in this._client) {
-      try {
-        this._client._addFinishedSpan(this);
-      } catch (error) {
-        if (this._client && this._client._config && this._client._config.debug) {
-          console.error('[Noveum] Error notifying client of finished span:', error);
-        }
-        // Continue execution - don't let client errors break span finishing
-      }
-    }
+    // Spans are now only sent as part of their parent traces
+    // Individual span sending has been disabled to match Python SDK behavior
   }
 
   /**
@@ -283,19 +279,43 @@ export class StandaloneSpan implements ISpan {
   }
 
   /**
-   * Serialize the span for transport
+   * Convert status enum to string values matching Python SDK
+   */
+  private statusToString(status: SpanStatus): string {
+    switch (status) {
+      case SpanStatus.OK:
+        return 'ok';
+      case SpanStatus.ERROR:
+        return 'error';
+      case SpanStatus.TIMEOUT:
+        return 'timeout';
+      case SpanStatus.CANCELLED:
+        return 'cancelled';
+      case SpanStatus.UNSET:
+      default:
+        return 'unset';
+    }
+  }
+
+  /**
+   * Serialize the span for transport (Python SDK compatible format)
    */
   serialize(): SerializedSpan {
+    const duration = this._endTime ? this._endTime.getTime() - this._startTime.getTime() : 0;
+
+    // Convert status to Python SDK format
+    const status = this.statusToString(this._status);
+
     return {
-      traceId: this._traceId,
-      spanId: this._spanId,
-      parentSpanId: this._parentSpanId,
+      span_id: this._spanId,
+      trace_id: this._traceId,
+      parent_span_id: this._parentSpanId || null,
       name: this._name,
-      kind: this._kind,
-      startTime: this._startTime.toISOString(),
-      endTime: this._endTime?.toISOString(),
-      status: this._status,
-      statusMessage: this._statusMessage,
+      start_time: formatPythonCompatibleTimestamp(this._startTime),
+      end_time: this._endTime ? formatPythonCompatibleTimestamp(this._endTime) : null,
+      duration_ms: duration,
+      status,
+      status_message: this._statusMessage || null,
       attributes: { ...this._attributes },
       events: this._events.map(
         event =>
@@ -305,7 +325,11 @@ export class StandaloneSpan implements ISpan {
             attributes: event.attributes,
           }) as SerializedEvent
       ),
-      links: this._links,
+      links: this._links.map(link => ({
+        trace_id: link.context.trace_id,
+        span_id: link.context.span_id,
+        attributes: link.attributes || {},
+      })),
     };
   }
 }
