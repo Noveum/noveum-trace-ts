@@ -267,8 +267,15 @@ export class StandaloneSpan implements ISpan {
     // Now mark as finished
     this._isFinished = true;
 
-    // Spans are now only sent as part of their parent traces
-    // Individual span sending has been disabled to match Python SDK behavior
+    // Notify client if available
+    if (this._client && typeof this._client._addFinishedSpan === 'function') {
+      try {
+        this._client._addFinishedSpan(this);
+      } catch (error) {
+        // Handle client errors gracefully - just log and continue
+        console.warn('Failed to notify client of finished span:', error);
+      }
+    }
   }
 
   /**

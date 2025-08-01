@@ -150,6 +150,7 @@ export {
   InstrumentationRegistry,
   getGlobalInstrumentationRegistry,
   setGlobalInstrumentationRegistry,
+  createInstrumentationRegistry,
 
   // Specific instrumentation implementations
   OpenAIInstrumentation,

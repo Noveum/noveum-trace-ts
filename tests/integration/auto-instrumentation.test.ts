@@ -144,7 +144,7 @@ class AutoInstrumentationIntegrationTest {
 
     } catch (error) {
       console.error('❌ Test suite failed:', error);
-      process.exit(1);
+      throw error; // surface failure to the test framework
     } finally {
       await this.cleanup();
     }

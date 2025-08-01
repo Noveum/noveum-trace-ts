@@ -4,6 +4,13 @@ import { trace } from '../../src/decorators/simple.js';
 import { NoveumClient } from '../../src/core/client.js';
 import type { NoveumClientOptions } from '../../src/core/types.js';
 
+// Mock the transport
+vi.mock('../../src/transport/http-transport.js', () => ({
+  HttpTransport: vi.fn().mockImplementation(() => ({
+    send: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 describe('Decorators', () => {
   let client: NoveumClient;
   const mockOptions: Partial<NoveumClientOptions> = {
@@ -14,6 +21,7 @@ describe('Decorators', () => {
   };
 
   beforeEach(() => {
+    vi.clearAllMocks();
     client = new NoveumClient(mockOptions);
     setGlobalClient(client);
   });

@@ -2,24 +2,31 @@
  * Core functionality tests for the Noveum Trace SDK
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NoveumClient } from '../../src/core/client.js';
-import { MockTransport } from '../../src/transport/http-transport.js';
 import { SpanStatus, TraceLevel } from '../../src/core/types.js';
+
+// Mock the transport
+vi.mock('../../src/transport/http-transport.js', () => ({
+  HttpTransport: vi.fn().mockImplementation(() => ({
+    send: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
 
 describe('NoveumClient', () => {
   let client: NoveumClient;
-  let mockTransport: MockTransport;
+  let mockTransport: any;
 
   beforeEach(() => {
-    mockTransport = new MockTransport();
+    vi.clearAllMocks();
     client = new NoveumClient({
       apiKey: 'test-key',
       project: 'test-project',
-      transport: {
-        batchSize: 1, // Immediate flushing for tests
-      },
+      batchSize: 1, // Immediate flushing for tests
     });
+    
+    // Get the mocked transport instance
+    mockTransport = (client as any)._transport;
   });
 
   afterEach(async () => {
@@ -79,7 +86,7 @@ describe('NoveumClient', () => {
       const trace = await client.startTrace('test-trace');
       const parentSpan = await trace.startSpan('parent-span');
       const childSpan = await trace.startSpan('child-span', {
-        parentSpanId: parentSpan.spanId,
+        parent_span_id: parentSpan.spanId,
       });
       
       expect(childSpan.parentSpanId).toBe(parentSpan.spanId);
@@ -225,8 +232,8 @@ describe('NoveumClient', () => {
       expect(serialized.name).toBe('test-span');
       expect(serialized.attributes['test.key']).toBe('test.value');
       expect(serialized.events).toHaveLength(1);
-      expect(serialized.startTime).toBeDefined();
-      expect(serialized.endTime).toBeDefined();
+      expect(serialized.start_time).toBeDefined();
+      expect(serialized.end_time).toBeDefined();
     });
 
     it('should serialize traces', async () => {
@@ -242,8 +249,8 @@ describe('NoveumClient', () => {
       expect(serialized.name).toBe('test-trace');
       expect(serialized.attributes['trace.key']).toBe('trace.value');
       expect(serialized.spans).toHaveLength(1);
-      expect(serialized.startTime).toBeDefined();
-      expect(serialized.endTime).toBeDefined();
+      expect(serialized.start_time).toBeDefined();
+      expect(serialized.end_time).toBeDefined();
     });
   });
 });
@@ -278,7 +285,7 @@ describe('Span', () => {
     const trace = await client.startTrace('test-trace');
     const rootSpan = await trace.startSpan('root-span');
     const childSpan = await trace.startSpan('child-span', {
-      parentSpanId: rootSpan.spanId,
+      parent_span_id: rootSpan.spanId,
     });
     
     expect(rootSpan.isRootSpan()).toBe(true);
@@ -354,7 +361,7 @@ describe('Trace', () => {
     
     const rootSpan = await trace.startSpan('root-span');
     const childSpan = await trace.startSpan('child-span', {
-      parentSpanId: rootSpan.spanId,
+      parent_span_id: rootSpan.spanId,
     });
     
     expect(trace.getRootSpan()).toBe(rootSpan);
@@ -365,10 +372,10 @@ describe('Trace', () => {
     
     const parentSpan = await trace.startSpan('parent-span');
     const child1 = await trace.startSpan('child1', {
-      parentSpanId: parentSpan.spanId,
+      parent_span_id: parentSpan.spanId,
     });
     const child2 = await trace.startSpan('child2', {
-      parentSpanId: parentSpan.spanId,
+      parent_span_id: parentSpan.spanId,
     });
     
     const children = trace.getChildSpans(parentSpan.spanId);

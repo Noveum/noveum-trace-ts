@@ -396,10 +396,8 @@ export class NoveumClient {
     try {
       await this._transport.send(batch);
     } catch (error) {
-      if (this._config.debug) {
-        console.error('[Noveum] Failed to send batch:', error);
-      }
-      throw error;
+      console.error('[Noveum] Failed to send batch:', error);
+      // Don't re-throw to allow graceful error handling
     }
   }
 
@@ -425,10 +423,8 @@ export class NoveumClient {
     try {
       await this._transport.send(batch);
     } catch (error) {
-      if (this._config.debug) {
-        console.error('[Noveum] Failed to send batch:', error);
-      }
-      throw error;
+      console.error('[Noveum] Failed to send batch:', error);
+      // Don't re-throw to allow graceful error handling
     }
   }
 

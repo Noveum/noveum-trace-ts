@@ -397,7 +397,7 @@ describe('Auto-Instrumentation Registry', () => {
       registry.register(openaiInstrumentation);
 
       const registrations = registry.getInstrumentations();
-      expect(Object.keys(registrations).length).toBeGreaterThan(0);
+      expect(registrations.size).toBeGreaterThan(0);
     });
   });
 });
