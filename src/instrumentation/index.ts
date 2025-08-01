@@ -75,8 +75,15 @@ export async function autoTraceOpenAI(
     registry.register(openaiInstrumentation);
   }
 
-  // Instrument the client
-  await registry.instrument(openaiClient, 'openai', config);
+  try {
+    // Instrument the client
+    await registry.instrument(openaiClient, 'openai', config);
+  } catch (error) {
+    // Handle instrumentation errors gracefully
+    console.warn(
+      `Failed to instrument OpenAI client: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
 }
 
 /**

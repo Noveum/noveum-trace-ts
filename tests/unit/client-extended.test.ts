@@ -80,7 +80,7 @@ describe('NoveumClient Extended Tests', () => {
     it('should create spans with options', async () => {
       const parentSpan = await client.startSpan('parent-span');
       const childSpan = await client.startSpan('child-span', {
-        parentSpanId: parentSpan.spanId,
+        parent_span_id: parentSpan.spanId,
         kind: SpanKind.CLIENT,
         attributes: { 'test.key': 'test.value' },
       });

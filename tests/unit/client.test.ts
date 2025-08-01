@@ -116,13 +116,17 @@ describe('NoveumClient', () => {
       await trace.finish();
       
       // Mock transport to throw error
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const originalSend = (client as any)._transport.send;
       (client as any)._transport.send = vi.fn().mockRejectedValue(new Error('Network error'));
       
-      await expect(client.flush()).rejects.toThrow('Network error');
+      // Should not throw, but should log the error
+      await expect(client.flush()).resolves.not.toThrow();
+      expect(consoleSpy).toHaveBeenCalledWith('[Noveum] Failed to send batch:', expect.any(Error));
       
       // Restore original method
       (client as any)._transport.send = originalSend;
+      consoleSpy.mockRestore();
     });
   });
 
