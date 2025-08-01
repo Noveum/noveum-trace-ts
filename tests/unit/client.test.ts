@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NoveumClient, initializeClient, getGlobalClient, resetGlobalClient } from '../../src/core/client.js';
-import type { NoveumClientOptions } from '../../src/core/types.js';
+import type { NoveumClientOptions, SpanStatus, TraceLevel } from '../../src/core/types.js';
+
+// Mock the transport to avoid actual HTTP calls
+vi.mock('../../src/transport/http-transport.js', () => ({
+  HttpTransport: vi.fn().mockImplementation(() => ({
+    send: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
 
 describe('NoveumClient', () => {
   let client: NoveumClient;
@@ -55,7 +62,7 @@ describe('NoveumClient', () => {
     it('should create trace with custom options', async () => {
       const customTraceId = 'custom-trace-id';
       const trace = await client.createTrace('test-trace', {
-        traceId: customTraceId,
+        trace_id: customTraceId,
         attributes: { 'test.key': 'test.value' },
       });
       
@@ -90,7 +97,7 @@ describe('NoveumClient', () => {
     it('should create span with custom options', async () => {
       const customTraceId = 'custom-trace-id';
       const span = await client.startSpan('test-span', {
-        traceId: customTraceId,
+        trace_id: customTraceId,
         attributes: { 'span.key': 'span.value' },
       });
       
@@ -104,9 +111,9 @@ describe('NoveumClient', () => {
     });
 
     it('should handle flush errors gracefully', async () => {
-      // Create a span to have something to flush
-      const span = await client.startSpan('test-span');
-      await span.finish();
+      // Create a trace (not standalone span) to have something to flush
+      const trace = await client.createTrace('test-trace');
+      await trace.finish();
       
       // Mock transport to throw error
       const originalSend = (client as any)._transport.send;

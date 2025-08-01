@@ -19,35 +19,97 @@ export function generateSpanId(): string {
   return uuidv4().replace(/-/g, '').substring(0, 16);
 }
 
+// getCurrentTimestamp function moved below after formatPythonCompatibleTimestamp
+
 /**
- * Get current timestamp as ISO string
+ * Format timestamp to match Python SDK format exactly
+ * Python uses: "2025-07-29T18:18:34.786583+00:00" (microsecond precision, with +00:00 timezone)
+ * JavaScript native: "2025-07-28T15:40:05.753Z" (millisecond precision, with Z suffix)
+ *
+ * This implementation ensures exact compatibility with Python's datetime.isoformat(timespec='microseconds')
  */
-export function getCurrentTimestamp(): string {
-  return new Date().toISOString();
+export function formatPythonCompatibleTimestamp(date: Date = new Date()): string {
+  // Handle invalid dates
+  if (isNaN(date.getTime())) {
+    throw new Error('Invalid date provided to formatPythonCompatibleTimestamp');
+  }
+
+  // Extract UTC components explicitly to ensure correct handling of edge cases
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hour = String(date.getUTCHours()).padStart(2, '0');
+  const minute = String(date.getUTCMinutes()).padStart(2, '0');
+  const second = String(date.getUTCSeconds()).padStart(2, '0');
+
+  // JavaScript only provides millisecond precision, so we pad to microseconds
+  const milliseconds = String(date.getUTCMilliseconds()).padStart(3, '0');
+  const microseconds = `${milliseconds}000`; // Pad to 6 digits for microsecond precision
+
+  // Format exactly as Python does: YYYY-MM-DDTHH:MM:SS.ffffff+00:00
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}.${microseconds}+00:00`;
 }
 
 /**
- * Format timestamp to match Python SDK format
- * Python uses: "2025-07-28T11:39:59.305103" (microsecond precision, no Z suffix)
- * JavaScript native: "2025-07-28T15:40:05.753Z" (millisecond precision, with Z suffix)
+ * Legacy function that uses the more robust implementation above
+ * @deprecated Use formatPythonCompatibleTimestamp instead
  */
-export function formatPythonCompatibleTimestamp(date: Date = new Date()): string {
-  const isoString = date.toISOString();
+export function getCurrentTimestamp(): string {
+  return formatPythonCompatibleTimestamp();
+}
 
-  // Remove the 'Z' suffix and add microsecond precision
-  const withoutZ = isoString.slice(0, -1); // Remove 'Z'
+/**
+ * Test function to validate timestamp formatting compatibility
+ * This ensures our formatting matches Python SDK expectations exactly
+ */
+export function validateTimestampFormatting(): {
+  success: boolean;
+  results: Array<{ test: string; expected: string; actual: string; passed: boolean }>;
+} {
+  const testCases = [
+    {
+      test: 'Current date',
+      date: new Date('2025-01-19T19:31:03.123Z'),
+      expected: '2025-01-19T19:31:03.123000+00:00',
+    },
+    {
+      test: 'Zero milliseconds',
+      date: new Date('2025-01-19T19:31:03.000Z'),
+      expected: '2025-01-19T19:31:03.000000+00:00',
+    },
+    {
+      test: 'Date before 1970',
+      date: new Date('1969-12-31T23:59:59.999Z'),
+      expected: '1969-12-31T23:59:59.999000+00:00',
+    },
+    {
+      test: 'Leap year date',
+      date: new Date('2024-02-29T12:00:00.456Z'),
+      expected: '2024-02-29T12:00:00.456000+00:00',
+    },
+    {
+      test: 'Single digit month/day',
+      date: new Date('2025-01-01T01:01:01.001Z'),
+      expected: '2025-01-01T01:01:01.001000+00:00',
+    },
+  ];
 
-  // Convert milliseconds to microseconds by adding three zeros
-  // e.g., "2025-07-28T15:40:05.753" -> "2025-07-28T15:40:05.753000"
-  const parts = withoutZ.split('.');
-  if (parts.length === 2) {
-    const [datePart, milliseconds] = parts;
-    const microseconds = (milliseconds || '').padEnd(6, '0');
-    return `${datePart}.${microseconds}`;
-  }
+  const results = testCases.map(({ test, date, expected }) => {
+    const actual = formatPythonCompatibleTimestamp(date);
+    return {
+      test,
+      expected,
+      actual,
+      passed: actual === expected,
+    };
+  });
 
-  // Fallback: add .000000 if no decimal part
-  return `${withoutZ}.000000`;
+  const allPassed = results.every(result => result.passed);
+
+  return {
+    success: allPassed,
+    results,
+  };
 }
 
 /**
@@ -348,3 +410,29 @@ export function extractErrorInfo(error: unknown): {
     name: 'Unknown',
   };
 }
+
+// Migration utilities
+export {
+  migrateTrace,
+  migrateSpan,
+  migrateTraces,
+  validateMigratedTrace,
+  generateMigrationReport,
+  type MigrationOptions,
+  type MigrationReport,
+} from './migration.js';
+
+// PII Redaction utilities
+export {
+  redactPII,
+  redactEmails,
+  redactPhoneNumbers,
+  redactCreditCards,
+  redactSSN,
+  redactIPAddresses,
+  detectPIITypes,
+  PIIType,
+  type PIIRedactionOptions,
+  type PIIDetectionResult,
+  type PIIDetection,
+} from './pii-redaction.js';
