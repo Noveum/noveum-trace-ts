@@ -4,7 +4,7 @@ import { SpanStatus, SpanKind } from '../../src/core/types.js';
 import type { SpanOptions } from '../../src/core/types.js';
 
 interface ExtendedSpanOptions extends SpanOptions {
-  traceId: string;
+  trace_id: string;
   client?: any;
   enabled?: boolean;
 }
@@ -18,7 +18,7 @@ describe('Span', () => {
   beforeEach(() => {
     mockClient._addFinishedSpan.mockClear(); // Reset the mock between tests
     const options: ExtendedSpanOptions = {
-      traceId: 'test-trace-id',
+      trace_id: 'test-trace-id',
       client: mockClient as any,
     };
     span = new Span('test-span-id', 'test-span', options);
@@ -35,8 +35,8 @@ describe('Span', () => {
 
     it('should set optional properties', () => {
       const options: ExtendedSpanOptions = {
-        traceId: 'test-trace-id',
-        parentSpanId: 'parent-span-id',
+        trace_id: 'test-trace-id',
+        parent_span_id: 'parent-span-id',
         kind: SpanKind.CLIENT,
         attributes: { 'test.key': 'test.value' },
         client: mockClient as any,
@@ -123,16 +123,16 @@ describe('Span', () => {
       span.setStatus(SpanStatus.ERROR, 'Something went wrong');
       
       const serialized = span.serialize();
-      expect(serialized.status).toBe(SpanStatus.ERROR);
-      expect(serialized.statusMessage).toBe('Something went wrong');
+      expect(serialized.status).toBe('error');
+      expect(serialized.status_message).toBe('Something went wrong');
     });
 
     it('should set status without message', () => {
       span.setStatus(SpanStatus.OK);
       
       const serialized = span.serialize();
-      expect(serialized.status).toBe(SpanStatus.OK);
-      expect(serialized.statusMessage).toBeUndefined();
+      expect(serialized.status).toBe('ok');
+      expect(serialized.status_message).toBe(null);
     });
   });
 
@@ -145,7 +145,7 @@ describe('Span', () => {
       
       expect(span.isFinished).toBe(true);
       expect(span.endTime).toBeInstanceOf(Date);
-      expect(mockClient._addFinishedSpan).toHaveBeenCalledWith(span);
+      // StandaloneSpan doesn't call _addFinishedSpan - spans are sent with traces
     });
 
     it('should not finish twice', async () => {
@@ -155,7 +155,7 @@ describe('Span', () => {
       await span.finish();
       
       expect(span.endTime).toBe(firstEndTime);
-      expect(mockClient._addFinishedSpan).toHaveBeenCalledTimes(1);
+      // StandaloneSpan doesn't call _addFinishedSpan
     });
 
     it('should finish with custom end time', async () => {
@@ -175,15 +175,15 @@ describe('Span', () => {
       const serialized = span.serialize();
       
       expect(serialized).toEqual({
-        spanId: 'test-span-id',
-        traceId: 'test-trace-id',
+        span_id: 'test-span-id',
+        trace_id: 'test-trace-id',
         name: 'test-span',
-        startTime: span.startTime.toISOString(),
-        endTime: undefined,
-        status: SpanStatus.OK,
-        statusMessage: undefined,
-        kind: SpanKind.INTERNAL,
-        parentSpanId: undefined,
+        start_time: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+00:00$/),
+        end_time: null,
+        duration_ms: 0,
+        status: 'ok',
+        status_message: null,
+        parent_span_id: null,
         attributes: { 'test.key': 'test.value' },
         events: expect.arrayContaining([
           expect.objectContaining({
@@ -197,10 +197,13 @@ describe('Span', () => {
     });
 
     it('should serialize finished span', async () => {
+      // Add a small delay to ensure duration > 0
+      await new Promise(resolve => setTimeout(resolve, 1));
       await span.finish();
       
       const serialized = span.serialize();
-      expect(serialized.endTime).toBe(span.endTime!.toISOString());
+      expect(serialized.end_time).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+00:00$/);
+      expect(serialized.duration_ms).toBeGreaterThanOrEqual(0);
     });
   });
 

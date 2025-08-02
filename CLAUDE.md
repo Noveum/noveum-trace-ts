@@ -8,34 +8,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm run build        # Build the project using tsup
-npm run build:watch  # Build in watch mode for development
-npm run dev         # Alias for build:watch
+npm run dev          # Build in watch mode for development (--watch)
+npm run build:docs   # Generate TypeDoc documentation
 ```
 
 ### Running tests
 
 ```bash
-npm test                   # Run all tests using Vitest
+npm test                   # Run all unit tests using Vitest
 npm run test:watch        # Run tests in watch mode
 npm run test:coverage     # Run tests with coverage report
-npm run test:ui          # Run tests with Vitest UI
-
-# Integration tests (require NOVEUM_API_KEY in .env)
-npm run test:integration       # Run complete integration test suite
-npm run test:integration:api   # Run API integration tests only
-npm run test:integration:framework  # Run framework integration tests only
-npm run test:smoke            # Quick smoke test
-npm run test:health           # Health check test
+npm run test:e2e          # Run end-to-end tests
+npm run test:e2e:watch    # Run e2e tests in watch mode
+npm run test:integration  # Run integration tests (requires NOVEUM_API_KEY)
+npm run test:all          # Run all tests (unit + e2e + integration)
 ```
 
 ### Code quality and formatting
 
 ```bash
-npm run lint             # Run ESLint on source files
-npm run lint:fix        # Run ESLint and auto-fix issues
+npm run lint             # Run ESLint and auto-fix issues
+npm run lint:check      # Run ESLint without fixing
 npm run format          # Format code with Prettier
-npm run format:check    # Check code formatting
-npm run typecheck       # Run TypeScript type checking
+npm run format:check    # Check code formatting without fixing
+npm run check-types     # Run TypeScript type checking
 ```
 
 ### CI/CD and automation
@@ -64,35 +60,30 @@ The project includes comprehensive GitHub Actions workflows:
   - Example validation and README completeness checks
   - Scripts documentation synchronization
 
-### Development tools
+### Release and maintenance
 
 ```bash
-npm run docs           # Generate TypeDoc documentation
-npm run clean          # Clean build outputs and dependencies
-npm run commit         # Interactive commit using Commitizen
-npm run prepare        # Install Git hooks (runs automatically)
-
-# Release commands
-npm run release            # Create release with automatic version bump
-npm run release:dry        # Preview release changes
-npm run release:patch      # Force patch version release
-npm run release:minor      # Force minor version release
-npm run release:major      # Force major version release
+npm run release        # Create release with automatic version bump using standard-version
 ```
 
 ### Environment setup
 
-1. Copy `.env.example` to `.env` and configure:
+1. Copy `.env.example` to `.env` and configure API keys for testing:
 
    ```bash
-   NOVEUM_API_KEY=your_api_key_here
-   NOVEUM_PROJECT=your_project_name
-   NOVEUM_ENVIRONMENT=development
+   # Required for tracing functionality
+   NOVEUM_API_KEY=your_noveum_api_key_here
+
+   # Optional: For OpenAI integration tests
+   OPENAI_API_KEY=your_openai_api_key_here
+
+   # Other provider keys as needed for testing
+   ANTHROPIC_API_KEY=your_anthropic_api_key_here
    ```
 
 2. Run integration tests to verify setup:
    ```bash
-   npm run test:health
+   npm run test:integration
    ```
 
 ## Important Implementation Details
@@ -104,8 +95,8 @@ The Noveum Trace TypeScript SDK follows a modular architecture designed for perf
 #### Client Management (`src/core/client.ts`)
 
 - **NoveumClient**: Central client class managing configuration, HTTP transport, and lifecycle
-- **Configuration validation**: Comprehensive validation with sensible defaults
-- **Batch processing**: Intelligent batching with configurable size and flush intervals
+- **Configuration system**: Both new Python-compatible config (`src/types/config.ts`) and legacy options
+- **Batch processing**: Intelligent batching with configurable size and flush intervals via `BatchProcessor`
 - **Error handling**: Robust retry logic with exponential backoff
 - **Resource management**: Automatic cleanup and graceful shutdown
 
@@ -116,25 +107,42 @@ The Noveum Trace TypeScript SDK follows a modular architecture designed for perf
 - **Context Propagation**: Advanced context management for span relationships
 - **Standalone Support**: Self-contained trace/span operations for edge cases
 
-#### Transport Layer (`src/transport/http-transport.ts`)
+#### Transport Layer (`src/transport/`)
 
-- **HTTP Transport**: Robust HTTP client with retry logic and error handling
-- **Batch Serialization**: Efficient JSON serialization with timestamp compatibility
+- **HTTP Transport** (`http-transport.ts`): Robust HTTP client with retry logic and error handling
+- **Batch Processor** (`batch-processor.ts`): Efficient batching system with configurable thresholds
+- **Batch Serialization**: Efficient JSON serialization with Python-compatible timestamps
 - **Network Resilience**: Configurable timeouts, retries, and backoff strategies
 
 #### Integration Framework (`src/integrations/`)
 
-- **Express.js**: Complete middleware with request/response tracing
-- **Next.js**: App Router and Pages API support with automatic instrumentation
-- **Hono**: Modern framework integration with middleware and handler wrapping
+- **Express.js** (`express.ts`): Complete middleware with request/response tracing
+- **Next.js** (`nextjs.ts`): App Router support with `withNoveumTracing` wrapper
+- **Hono** (`hono.ts`): Modern framework integration with middleware and handler wrapping
 - **Framework Agnostic**: Manual tracing support for any TypeScript/JavaScript application
 
 #### Developer Experience (`src/decorators/`)
 
-- **TypeScript Decorators**: `@trace` and `@span` decorators for automatic instrumentation
-- **Function Wrappers**: `traceFunction()` and `spanFunction()` for inline tracing
+- **Comprehensive Decorators**: `@trace`, `@traceLLM`, `@traceAgent`, `@traceRetrieval`, `@traceTool` for automatic instrumentation
+- **Specialized Decorators**: Domain-specific decorators matching Python SDK functionality
+- **Base Decorator** (`base.ts`): Core decorator functionality with flexible options
 - **Type Safety**: Full TypeScript support with excellent IntelliSense
 - **Debug Support**: Comprehensive logging and error reporting
+
+#### LLM Utilities (`src/llm/`)
+
+- **Cost Estimation** (`cost-estimation.ts`): Token-based cost calculation for LLM providers
+- **Model Registry** (`model-registry.ts`): Comprehensive model metadata and capabilities
+- **Token Counting** (`token-counting.ts`): Accurate token counting using tiktoken
+- **Data Sanitization** (`sanitization.ts`): PII detection and redaction for LLM data
+- **Validation** (`validation.ts`): LLM request/response validation and normalization
+
+#### Auto-Instrumentation (`src/instrumentation/`)
+
+- **Provider Support**: OpenAI and Anthropic auto-instrumentation
+- **Registry System** (`registry.ts`): Extensible instrumentation registry
+- **Base Classes** (`base.ts`): Common instrumentation patterns
+- **Type Definitions** (`types.ts`): Instrumentation interfaces and types
 
 ### Key Design Decisions
 
@@ -143,14 +151,15 @@ The Noveum Trace TypeScript SDK follows a modular architecture designed for perf
 - **Async-First Design**: All operations are non-blocking with Promise-based APIs
 - **Lazy Serialization**: Data is only serialized when actually sending to reduce CPU overhead
 - **Memory Management**: Automatic cleanup of finished traces and spans to prevent memory leaks
-- **Batch Processing**: Intelligent batching reduces network calls and improves throughput
+- **Batch Processing**: Intelligent batching with dedicated `BatchProcessor` reduces network calls
 
 #### Python SDK Compatibility
 
 - **API Parity**: 100% compatible API surface with the Python SDK
+- **Configuration System**: New Python-compatible config structure in `src/types/config.ts`
 - **Data Format**: Identical JSON output format for cross-language compatibility
 - **Timestamp Format**: Python-compatible microsecond precision timestamps (no Z suffix)
-- **Status Management**: Full status field support matching Python implementation
+- **Decorator Compatibility**: Matching decorator functionality (`@traceLLM`, `@traceAgent`, etc.)
 
 #### Error Handling Strategy
 
@@ -175,7 +184,7 @@ The SDK is built around three main concepts:
    - Located in `src/core/client.ts`
    - Handles API authentication, batching logic, and flush intervals
    - Creates traces and spans with sampling support
-   - Global client instance accessible via `initializeClient()` or `getGlobalClient()`
+   - Global client instance accessible via `initializeNoveum()` or `getDefaultClient()`
 
 2. **Trace**: Represents a complete operation flow through a system
    - Located in `src/core/trace.ts`
@@ -192,36 +201,39 @@ The SDK is built around three main concepts:
 1. **Context Propagation**
    - Managed by `ContextManager` in `src/context/context-manager.ts`
    - Maintains current trace/span context across async operations
-   - Global context accessible via helper functions
+   - Global context accessible via `getGlobalContextManager()` and helper functions
+   - Contextual wrappers: `ContextualSpan`, `ContextualTrace`
 
 2. **Transport Layer**
    - Abstract transport interface with HTTP implementation
-   - Located in `src/transport/http-transport.ts`
-   - Handles batching, retries, and error handling
-   - Configurable timeout and retry logic
+   - Located in `src/transport/http-transport.ts` and `src/transport/batch-processor.ts`
+   - Dedicated `BatchProcessor` handles intelligent batching
+   - Configurable timeout and retry logic with exponential backoff
 
 3. **Decorator Support**
-   - TypeScript decorators in `src/decorators/index.ts`
-   - Enable automatic tracing via `@trace`, `@span`, `@autoSpan`
-   - Support method timing and retry logic
+   - Comprehensive decorator system in `src/decorators/`
+   - Base decorator (`base.ts`) and specialized decorators (`llm.ts`, `agent.ts`, `retrieval.ts`, `tool.ts`)
+   - Enable automatic tracing via `@trace`, `@traceLLM`, `@traceAgent`, `@traceRetrieval`, `@traceTool`
+   - Python SDK compatible decorator functionality
 
 4. **Framework Integrations**
    - Express.js middleware in `src/integrations/express.ts`
    - Next.js App Router wrapper in `src/integrations/nextjs.ts`
    - Hono middleware and wrapper in `src/integrations/hono.ts`
-   - Each provides automatic request tracing
+   - Each provides automatic request tracing with configurable options
 
 5. **Sampling System**
    - Rate-based sampling in `src/core/sampler.ts`
    - Configurable rules based on trace name patterns
    - Reduces overhead in production environments
+   - Both legacy and new configuration formats supported
 
-6. **Integration Tests**
-   - Comprehensive API testing in `tests/integration/api-integration.test.ts`
-   - Framework middleware testing in `tests/integration/framework-integration.test.ts`
-   - Real API validation against api.noveum.ai
-   - Tests authentication, batch processing, error handling, concurrent submissions
-   - Framework integrations tested with actual HTTP requests
+6. **Testing Infrastructure**
+   - **Unit Tests** (`tests/unit/`): Core functionality testing with high coverage thresholds
+   - **Integration Tests** (`tests/integration/`): API validation, framework testing, Python compatibility
+   - **E2E Tests** (`tests/e2e/`): End-to-end framework and mock api testing
+   - **Real API Tests**: Validation against actual Noveum API and OpenAI integration
+   - **Auto-instrumentation Testing**: Validation of automatic instrumentation features
 
 7. **GitHub Actions CI/CD**
    - Complete CI/CD pipeline in `.github/workflows/ci.yml`
@@ -229,23 +241,34 @@ The SDK is built around three main concepts:
    - PR validation in `.github/workflows/pr-validation.yml`
    - Maintenance and health checks in `.github/workflows/maintenance.yml`
    - Automated documentation updates in `.github/workflows/docs-update.yml`
-   - Dependabot configuration for dependency updates
 
 ### Important Implementation Details
 
-- **TypeScript Configuration**: Strict mode enabled with all strict checks, ES2022 target
+- **TypeScript Configuration**: Strict mode enabled with all strict checks, ES2022 target, experimental decorators
 - **Module System**: ESM with CommonJS compatibility, uses `.js` extensions in imports
 - **Build Tool**: tsup for building both ESM and CJS outputs with TypeScript declarations
-- **Testing**: Vitest for unit tests, located in `test/` directory
+- **Testing**: Vitest for unit/e2e tests with comprehensive coverage, located in `tests/` directory
+- **Package Structure**: Modular exports for integrations (`@noveum/trace/integrations/express`)
 - **Async Patterns**: Heavy use of async/await for all tracing operations
 - **Error Handling**: Non-blocking - tracing failures don't affect application flow
-- **Performance**: Batching and sampling to minimize overhead
+- **Performance**: Advanced batching via `BatchProcessor` and sampling to minimize overhead
 
 ### Key Files to Understand
 
-1. `src/index.ts` - Main exports and convenience functions
+1. `src/index.ts` - Main exports, default client, and convenience functions
 2. `src/core/client.ts` - Client implementation with batching logic
 3. `src/core/span.ts` & `src/core/trace.ts` - Core tracing primitives
-4. `src/core/types.ts` - TypeScript type definitions
-5. `src/decorators/index.ts` - Decorator implementations
-6. `src/integrations/*` - Framework-specific integrations
+4. `src/core/types.ts` - Core TypeScript type definitions
+5. `src/types/config.ts` - Python-compatible configuration system
+6. `src/decorators/` - Comprehensive decorator implementations
+7. `src/integrations/` - Framework-specific integrations
+8. `src/transport/batch-processor.ts` - Advanced batching system
+9. `src/llm/` - LLM utilities for cost estimation, token counting, and sanitization
+10. `src/instrumentation/` - Auto-instrumentation for popular providers
+
+# important-instruction-reminders
+
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (\*.md) or README files. Only create documentation files if explicitly requested by the User.
