@@ -219,10 +219,14 @@ export class Trace implements ITrace {
       spans: this._spans.map(span => span.serialize()),
       sdk: {
         name: 'noveum-trace-ts',
-        version: '1.0.0',
+        version: process.env.npm_package_version || '0.0.0',
       },
-      project: 'default',
-      environment: 'development',
+      project: process.env.NOVEUM_PROJECT || 'noveum-trace-ts',
+      environment:
+        process.env.NOVEUM_ENVIRONMENT ||
+        (process.env.GITHUB_ACTIONS === 'true' || process.env.CI === 'true'
+          ? 'git-action'
+          : 'development'),
     };
   }
 

@@ -8,7 +8,7 @@ import { StandaloneSpan as Span } from './span-standalone.js';
 import { HttpTransport } from '../transport/http-transport.js';
 import { getGlobalContextManager } from '../context/context-manager.js';
 import { Sampler } from './sampler.js';
-import { generateSpanId, getSdkVersion } from '../utils/index.js';
+import { generateSpanId, getSdkVersion, formatPythonCompatibleTimestamp } from '../utils/index.js';
 
 /**
  * Default client configuration
@@ -118,11 +118,14 @@ export class NoveumClient {
    */
   async startSpan(name: string, options: SpanOptions = {}): Promise<Span> {
     if (!this._config.enabled || this._isShutdown) {
-      return this._createNoOpSpan(name, options.trace_id || this._generateId());
+      const activeTraceId = (getGlobalContextManager().getActiveTrace() as Trace | undefined)
+        ?.traceId;
+      return this._createNoOpSpan(name, options.trace_id || activeTraceId || this._generateId());
     }
 
     const spanId = this._generateId();
-    const traceId = options.trace_id || this._generateId();
+    const activeTrace = getGlobalContextManager().getActiveTrace() as Trace | undefined;
+    const traceId = options.trace_id || activeTrace?.traceId || this._generateId();
 
     // Check sampling
     if (!this._sampler.shouldSample(traceId, name)) {
@@ -344,32 +347,47 @@ export class NoveumClient {
     }
 
     // Group spans by trace ID and convert to traces
-    const traceMap = new Map<string, any[]>();
-    spansToFlush.forEach(span => {
-      const serializedSpan = span.serialize();
-      const traceId = serializedSpan.trace_id;
-      if (!traceMap.has(traceId)) {
-        traceMap.set(traceId, []);
-      }
-      traceMap.get(traceId)!.push(serializedSpan);
-    });
+    const traceMap = new Map<string, Span[]>();
+    for (const s of spansToFlush) {
+      const tId = s.traceId;
+      if (!traceMap.has(tId)) traceMap.set(tId, []);
+      traceMap.get(tId)!.push(s);
+    }
 
     // Convert span groups to trace format
-    const traces = Array.from(traceMap.entries()).map(([traceId, spans]) => {
-      const firstSpan = spans[0];
-      const lastSpan = spans[spans.length - 1];
+    const traces = Array.from(traceMap.entries()).map(([traceId, spanGroup]) => {
+      const serializedSpans = spanGroup.map(s => s.serialize());
+      const hasError = serializedSpans.some(s => s.status === 'error');
+      const errorCount = serializedSpans.filter(s => s.status === 'error').length;
+
+      const rootSpan = spanGroup.find(s => (s as any).isRootSpan?.()) || spanGroup[0];
+
+      // Compute overall start/end from Date objects with defensive defaults
+      const startDate = spanGroup.reduce(
+        (min, s) => (s.startTime < min ? s.startTime : min),
+        spanGroup[0]?.startTime || new Date()
+      );
+      const endDate = spanGroup.reduce(
+        (max, s) => {
+          const candidate = s.endTime ?? s.startTime;
+          return candidate > max ? candidate : max;
+        },
+        spanGroup[0]?.endTime ?? spanGroup[0]?.startTime ?? new Date()
+      );
+
+      const durationMs = Math.max(0, endDate.getTime() - startDate.getTime());
 
       return {
         trace_id: traceId,
-        name: firstSpan.name,
-        start_time: firstSpan.start_time,
-        end_time: lastSpan.end_time,
-        duration_ms: spans.reduce((total, span) => total + span.duration_ms, 0),
-        status: spans.some(span => span.status === 'error') ? 'error' : 'ok',
+        name: rootSpan ? rootSpan.name : 'trace',
+        start_time: formatPythonCompatibleTimestamp(startDate),
+        end_time: formatPythonCompatibleTimestamp(endDate),
+        duration_ms: durationMs,
+        status: hasError ? 'error' : 'ok',
         status_message: null,
-        span_count: spans.length,
-        error_count: spans.filter(span => span.status === 'error').length,
-        attributes: firstSpan.attributes,
+        span_count: serializedSpans.length,
+        error_count: errorCount,
+        attributes: (rootSpan as any)?.attributes || {},
         metadata: {
           user_id: null,
           session_id: null,
@@ -377,20 +395,20 @@ export class NoveumClient {
           tags: {},
           custom_attributes: {},
         },
-        spans,
+        spans: serializedSpans,
         sdk: {
           name: 'noveum-trace-ts',
           version: getSdkVersion(),
         },
         project: this._config.project,
         environment: this._config.environment,
-        updated_at: new Date().toISOString(),
+        updated_at: formatPythonCompatibleTimestamp(new Date()),
       };
     });
 
     const batch: TraceBatch = {
       traces,
-      timestamp: Date.now() / 1000,
+      timestamp: Math.floor(Date.now() / 1000),
     };
 
     try {
@@ -417,7 +435,7 @@ export class NoveumClient {
 
     const batch: TraceBatch = {
       traces: tracesToFlush.map(trace => trace.serialize()),
-      timestamp: Date.now() / 1000,
+      timestamp: Math.floor(Date.now() / 1000),
     };
 
     try {

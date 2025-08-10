@@ -259,9 +259,12 @@ export class StandaloneTrace implements ITrace {
       }
     }
 
-    // Calculate duration and add it directly to attributes (avoid warning)
+    // Calculate duration and add it using setAttribute safely
     const duration = this._endTime.getTime() - this._startTime.getTime();
-    this._attributes['duration.ms'] = duration;
+    const wasFinished = this._isFinished;
+    this._isFinished = false;
+    this.setAttribute('duration.ms', duration);
+    this._isFinished = wasFinished;
 
     // If client is available and enabled, add this trace to pending queue
     // Use trace-based operation instead of span-based

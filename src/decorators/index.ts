@@ -81,6 +81,7 @@ export const decoratorUtils = {
    * Check if a function has been decorated with tracing
    */
   isTraced(fn: Function): boolean {
+    if (!fn || typeof fn !== 'function') return false;
     return (fn as any).__traced === true || (fn as any).__traceDecorator === true;
   },
 

@@ -249,7 +249,7 @@ export function redactEmails(
   const matches = Array.from(text.matchAll(PII_PATTERNS.email));
 
   for (const match of matches) {
-    if (!match.index) continue;
+    if (match.index === undefined || match.index === null) continue;
 
     const originalValue = match[0];
     const redactedValue = createRedactedText(originalValue, opts);
@@ -305,7 +305,7 @@ export function redactPhoneNumbers(
   const matches = Array.from(text.matchAll(PII_PATTERNS.phone));
 
   for (const match of matches) {
-    if (!match.index) continue;
+    if (match.index === undefined || match.index === null) continue;
 
     const originalValue = match[0];
     const redactedValue = createRedactedText(originalValue, opts);
@@ -358,7 +358,7 @@ export function redactCreditCards(
   const matches = Array.from(text.matchAll(PII_PATTERNS.creditCard));
 
   for (const match of matches) {
-    if (!match.index) continue;
+    if (match.index === undefined || match.index === null) continue;
 
     const originalValue = match[0];
     const validated = !opts.enableValidation || validateCreditCard(originalValue);
@@ -424,7 +424,7 @@ export function redactSSN(
   const matches = Array.from(text.matchAll(PII_PATTERNS.ssn));
 
   for (const match of matches) {
-    if (!match.index) continue;
+    if (match.index === undefined || match.index === null) continue;
 
     const originalValue = match[0];
     const redactedValue = createRedactedText(originalValue, opts);
@@ -483,11 +483,11 @@ export function redactIPAddresses(
   );
 
   for (const match of allMatches) {
-    if (!match.index) continue;
+    if (match.index === undefined || match.index === null) continue;
 
     const originalValue = match[0];
     const redactedValue = createRedactedText(originalValue, opts);
-    const isIPv4 = PII_PATTERNS.ipv4.test(originalValue);
+    const isIPv4 = new RegExp(PII_PATTERNS.ipv4.source).test(originalValue);
     const validated = !opts.enableValidation || (isIPv4 ? validateIPv4(originalValue) : true);
 
     detections.push({
@@ -633,7 +633,7 @@ export function redactPII(
       const detections: PIIDetection[] = [];
 
       for (const match of matches) {
-        if (!match.index) continue;
+        if (match.index === undefined || match.index === null) continue;
 
         const originalValue = match[0];
         const redactedValue = createRedactedText(originalValue, opts);
@@ -673,6 +673,15 @@ export function redactPII(
     }
   }
 
+  if (results.length === 0) {
+    return {
+      originalText: text,
+      redactedText: text,
+      detectedTypes: [],
+      detections: [],
+      redactionCount: {} as Record<PIIType, number>,
+    };
+  }
   return mergeDetectionResults(results);
 }
 
@@ -727,9 +736,11 @@ export function detectPIITypes(
   if (opts.enabledTypes.includes(PIIType.IP_ADDRESS)) {
     const ipv4Matches = Array.from(text.matchAll(PII_PATTERNS.ipv4));
     const ipv6Matches = Array.from(text.matchAll(PII_PATTERNS.ipv6));
-    const validIPs = opts.enableValidation
+    const validIPv4 = opts.enableValidation
       ? ipv4Matches.filter(match => match[0] && validateIPv4(match[0]))
-      : [...ipv4Matches, ...ipv6Matches];
+      : ipv4Matches;
+    const validIPv6 = ipv6Matches; // Accept IPv6 via regex match
+    const validIPs = [...validIPv4, ...validIPv6];
     if (validIPs.length > 0) {
       detectionCount[PIIType.IP_ADDRESS] = validIPs.length;
     }

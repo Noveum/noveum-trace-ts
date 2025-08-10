@@ -3,6 +3,7 @@
  */
 
 import type { Attributes } from '../core/types.js';
+import { getCurrentSpan } from '../context/context-manager.js';
 import { trace, TraceOptions } from './base.js';
 
 /**
@@ -72,7 +73,7 @@ const DEFAULT_COST_RATES: Record<string, { input: number; output: number }> = {
 const defaultTokenExtractor: TokenExtractor = (result: any): Partial<LLMMetadata> => {
   if (result && typeof result === 'object') {
     // OpenAI format
-    if (result.usage) {
+    if (result.usage && result.usage.prompt_tokens !== undefined) {
       return {
         inputTokens: result.usage.prompt_tokens,
         outputTokens: result.usage.completion_tokens,
@@ -81,7 +82,7 @@ const defaultTokenExtractor: TokenExtractor = (result: any): Partial<LLMMetadata
     }
 
     // Anthropic format
-    if (result.usage) {
+    if (result.usage && result.usage.input_tokens !== undefined) {
       return {
         inputTokens: result.usage.input_tokens,
         outputTokens: result.usage.output_tokens,
@@ -203,7 +204,7 @@ export function traceLLM(options: TraceLLMOptions = {}): any {
           }
 
           // Add extracted metadata to current span
-          const currentSpan = require('../context/context-manager.js').getCurrentSpan();
+          const currentSpan = getCurrentSpan();
           if (currentSpan) {
             // Add token metrics
             if (finalMetadata.inputTokens) {
@@ -235,7 +236,7 @@ export function traceLLM(options: TraceLLMOptions = {}): any {
         return result;
       } catch (error) {
         // Add error-specific LLM attributes
-        const currentSpan = require('../context/context-manager.js').getCurrentSpan();
+        const currentSpan = getCurrentSpan();
         if (currentSpan) {
           currentSpan.setAttribute('llm.error', true);
           if (error instanceof Error) {

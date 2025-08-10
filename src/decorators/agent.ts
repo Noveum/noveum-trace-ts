@@ -3,6 +3,7 @@
  */
 
 import type { Attributes } from '../core/types.js';
+import { getCurrentSpan } from '../context/context-manager.js';
 import { trace, TraceOptions } from './base.js';
 
 /**
@@ -227,7 +228,7 @@ export function traceAgent(options: TraceAgentOptions = {}): any {
       try {
         // Capture input if enabled
         if (captureInputOutput && args.length > 0) {
-          const currentSpan = require('../context/context-manager.js').getCurrentSpan();
+          const currentSpan = getCurrentSpan();
           if (currentSpan) {
             const inputData = args.length === 1 ? args[0] : args;
             currentSpan.setAttribute('agent.input', safeSerialize(inputData, maxCaptureLength));
@@ -239,7 +240,7 @@ export function traceAgent(options: TraceAgentOptions = {}): any {
         const result = await Promise.resolve(original.apply(this, args));
 
         // Capture output and additional metadata
-        const currentSpan = require('../context/context-manager.js').getCurrentSpan();
+        const currentSpan = getCurrentSpan();
         if (currentSpan) {
           // Capture output if enabled
           if (captureInputOutput && result !== undefined) {
@@ -299,7 +300,7 @@ export function traceAgent(options: TraceAgentOptions = {}): any {
         return result;
       } catch (error) {
         // Add error-specific agent attributes
-        const currentSpan = require('../context/context-manager.js').getCurrentSpan();
+        const currentSpan = getCurrentSpan();
         if (currentSpan) {
           currentSpan.setAttribute('agent.success', false);
           currentSpan.setAttribute('agent.error', true);

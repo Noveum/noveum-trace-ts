@@ -102,10 +102,8 @@ async function executeWithSpan<T>(
   let span: ISpan | undefined;
 
   try {
-    // Create a new trace if none exists and createTrace is enabled
-    if (!currentTrace && options.createTrace) {
-      // This would need to be implemented with a global client instance
-      // For now, we'll work with existing traces only
+    // Require an active trace (creating new traces here is not supported)
+    if (!currentTrace) {
       throw new Error('No active trace found. Please start a trace first.');
     }
 
@@ -123,12 +121,8 @@ async function executeWithSpan<T>(
       ...(parentSpan ? { parent_span_id: parentSpan.spanId } : {}),
     };
 
-    // Create a new span using the context manager
-    if (currentTrace) {
-      span = await currentTrace.startSpan(spanName, spanOptions);
-    } else {
-      throw new Error('No active trace found. Please start a trace first.');
-    }
+    // Create a new span using the context manager (currentTrace is verified above)
+    span = await currentTrace.startSpan(spanName, spanOptions);
 
     // Execute the function within the span context
     const result = await withContextAsync(

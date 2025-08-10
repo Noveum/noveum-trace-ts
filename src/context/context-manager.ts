@@ -15,6 +15,14 @@ class BrowserAsyncLocalStorage<T> {
   private _store: T | undefined;
 
   run<R>(store: T, callback: () => R): R {
+    // Warn if async callback is used; this polyfill does not propagate context across async boundaries
+    const isAsyncFn =
+      typeof callback === 'function' &&
+      ((callback as any)?.constructor?.name === 'AsyncFunction' ||
+        String(callback).trim().startsWith('async'));
+    if (isAsyncFn) {
+      console.warn('BrowserAsyncLocalStorage polyfill does not support async operations correctly');
+    }
     const previousStore = this._store;
     this._store = store;
     try {
@@ -220,8 +228,18 @@ export class ContextManager implements IContextManager {
       previousContext: currentContext.copy(),
     };
 
-    currentContext.activeTrace = trace;
-    currentContext.spanStack = []; // Reset span stack for new trace
+    // Create a new context instead of mutating the current one
+    const newContext = currentContext.copy({
+      activeTrace: trace,
+      spanStack: [],
+    });
+
+    const als: any = this._asyncLocalStorage as any;
+    if (typeof als.enterWith === 'function') {
+      als.enterWith(newContext);
+    } else {
+      this._fallbackContext = newContext;
+    }
 
     return token;
   }
@@ -230,11 +248,13 @@ export class ContextManager implements IContextManager {
    * Detach trace using token (Python SDK style)
    */
   detachTrace(token: ContextToken): void {
-    const currentContext = this.getCurrentContext();
-    currentContext.activeTrace = token.previousContext.activeTrace;
-    currentContext.activeSpan = token.previousContext.activeSpan;
-    currentContext.spanStack = [...token.previousContext.spanStack];
-    currentContext.attributes = { ...token.previousContext.attributes };
+    const restored = token.previousContext.copy();
+    const als: any = this._asyncLocalStorage as any;
+    if (typeof als.enterWith === 'function') {
+      als.enterWith(restored);
+    } else {
+      this._fallbackContext = restored;
+    }
   }
 
   /**
@@ -257,11 +277,19 @@ export class ContextManager implements IContextManager {
    * Detach span using token (Python SDK style)
    */
   detachSpan(token: ContextToken): void {
+    const restored = token.previousContext.copy();
+    // Mutate current store as an extra safety to ensure visibility across environments
     const currentContext = this.getCurrentContext();
-    currentContext.activeTrace = token.previousContext.activeTrace;
-    currentContext.activeSpan = token.previousContext.activeSpan;
-    currentContext.spanStack = [...token.previousContext.spanStack];
-    currentContext.attributes = { ...token.previousContext.attributes };
+    currentContext.activeTrace = restored.activeTrace;
+    currentContext.activeSpan = restored.activeSpan;
+    currentContext.spanStack = [...restored.spanStack];
+    currentContext.attributes = { ...restored.attributes };
+    const als: any = this._asyncLocalStorage as any;
+    if (typeof als.enterWith === 'function') {
+      als.enterWith(restored);
+    } else {
+      this._fallbackContext = restored;
+    }
   }
 
   /**

@@ -290,7 +290,7 @@ export interface FastifyIntegrationOptions {
 export interface SerializedEvent {
   name: string;
   timestamp: string;
-  attributes: Attributes;
+  attributes?: Attributes;
 }
 
 /**
