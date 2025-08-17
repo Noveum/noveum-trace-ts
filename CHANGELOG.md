@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.0.4](https://github.com/Noveum/noveum-trace-ts/compare/v1.0.3...v1.0.4) (2025-08-17)
+
+### 📚 Documentation
+
+- update readme with service name clarification ([f0155ca](https://github.com/Noveum/noveum-trace-ts/commit/f0155cae424ac90663ca326b02c3bb7841443866))
+
 ### [1.0.3](https://github.com/Noveum/noveum-trace-ts/compare/v1.0.2...v1.0.3) (2025-08-17)
 
 ### 🔄 Continuous Integration
