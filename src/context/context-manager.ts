@@ -422,6 +422,10 @@ export class ContextualSpan implements ISpan {
     this._span.setStatus(status, message);
   }
 
+  recordException(exception: Error | string): void {
+    this._span.recordException(exception);
+  }
+
   async finish(endTime?: Date): Promise<void> {
     try {
       await this._span.finish(endTime);

@@ -143,8 +143,7 @@ class RealOpenAIIntegrationTest {
       });
 
       // Perform OpenAI call within a span
-      const spanInstance = await this.client.startSpan('openai-api-call', {
-        traceId: traceInstance.traceId,
+      const spanInstance = await traceInstance.startSpan('openai-api-call', {
         attributes: {
           'openai.operation': 'chat.completions.create',
           'openai.model': 'gpt-3.5-turbo',

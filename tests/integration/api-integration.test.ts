@@ -213,8 +213,7 @@ class IntegrationTestSuite {
       });
 
       // Create multiple spans to simulate a complex workflow
-      const researchSpan = await this.client.startSpan('research-phase', {
-        trace_id: trace.traceId,
+      const researchSpan = await trace.startSpan('research-phase', {
         attributes: {
           'agent.type': 'researcher',
           phase: 'research',
@@ -229,8 +228,7 @@ class IntegrationTestSuite {
       researchSpan.setAttribute('documents.found', 15);
       await researchSpan.finish();
 
-      const analysisSpan = await this.client.startSpan('analysis-phase', {
-        trace_id: trace.traceId,
+      const analysisSpan = await trace.startSpan('analysis-phase', {
         attributes: {
           'agent.type': 'analyst',
           phase: 'analysis',
@@ -270,8 +268,7 @@ class IntegrationTestSuite {
         },
       });
 
-      const span = await this.client.startSpan('error-simulation', {
-        trace_id: trace.traceId,
+      const span = await trace.startSpan('error-simulation', {
         attributes: {
           operation: 'simulate-error',
         },

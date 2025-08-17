@@ -47,8 +47,14 @@ export class HttpTransport implements ITransport {
       throw new Error('Endpoint is required for HTTP transport');
     }
 
+    // Validate and clean API key
+    const apiKey = config.apiKey.trim();
+    if (!apiKey) {
+      throw new Error('API key cannot be empty or whitespace only');
+    }
+
     this._config = {
-      apiKey: config.apiKey,
+      apiKey,
       endpoint: this._normalizeEndpoint(config.endpoint),
       enableCompression: config.enableCompression ?? false,
       timeout: config.timeout ?? 30000,

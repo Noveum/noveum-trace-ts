@@ -167,9 +167,7 @@ export async function smokeTest(): Promise<boolean> {
     });
 
     // Test span creation
-    const span = await client.startSpan('smoke-test-span', {
-      traceId: trace.traceId,
-    });
+    const span = await trace.startSpan('smoke-test-span');
 
     // Test operations
     span.setAttribute('test.success', true);
@@ -180,7 +178,7 @@ export async function smokeTest(): Promise<boolean> {
 
     // Test serialization
     const serialized = trace.serialize();
-    if (!serialized.traceId || !serialized.status || !serialized.spans) {
+    if (!serialized.trace_id || !serialized.status || !serialized.spans) {
       throw new Error('Serialization failed - missing required fields');
     }
 
