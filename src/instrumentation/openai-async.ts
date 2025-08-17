@@ -57,7 +57,7 @@ export interface AsyncOperationContext {
 export class AsyncOpenAIInstrumentation {
   private readonly streamingContexts = new Map<string, StreamingTraceContext>();
   private readonly asyncOperations = new Map<string, AsyncOperationContext>();
-  private readonly operationTimeouts = new Map<string, NodeJS.Timeout>();
+  private readonly operationTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly contextManager = getGlobalContextManager();
 
   // Default cleanup timeout: 5 minutes (300,000ms)
@@ -458,7 +458,6 @@ export class AsyncOpenAIInstrumentation {
       });
 
       context.span.setStatus(SpanStatus.ERROR, 'Streaming operation failed');
-      await context.span.finish();
 
       throw error;
     }

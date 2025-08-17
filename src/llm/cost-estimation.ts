@@ -104,11 +104,29 @@ export function estimate_cost_from_tokens(
 export async function estimate_cost_batch(
   requests: Array<{ inputText: string; outputText?: string; model: string }>
 ): Promise<CostEstimate[]> {
-  const results = await Promise.all(
+  const results = await Promise.allSettled(
     requests.map(req => estimate_cost(req.inputText, req.model, req.outputText || ''))
   );
 
-  return results;
+  return results.map((result, index) => {
+    if (result.status === 'fulfilled') {
+      return result.value;
+    } else {
+      // Return a failed estimate with error information
+      const req = requests[index];
+      return {
+        input_cost: 0,
+        output_cost: 0,
+        total_cost: 0,
+        currency: 'USD' as const,
+        input_tokens: 0,
+        output_tokens: 0,
+        model: req?.model || 'unknown',
+        rates: { input_rate_per_1m: 0, output_rate_per_1m: 0 },
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      } as CostEstimate & { error?: string };
+    }
+  });
 }
 
 /**

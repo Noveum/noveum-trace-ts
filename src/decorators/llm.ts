@@ -199,7 +199,11 @@ export function traceLLM(options: TraceLLMOptions = {}): any {
           };
 
           // Calculate costs if enabled
-          if (estimateCosts && finalMetadata.inputTokens && finalMetadata.outputTokens) {
+          if (
+            estimateCosts &&
+            finalMetadata.inputTokens != null &&
+            finalMetadata.outputTokens != null
+          ) {
             finalMetadata.estimatedCost = defaultCostCalculator(finalMetadata);
           }
 
@@ -207,13 +211,13 @@ export function traceLLM(options: TraceLLMOptions = {}): any {
           const currentSpan = getCurrentSpan();
           if (currentSpan) {
             // Add token metrics
-            if (finalMetadata.inputTokens) {
+            if (finalMetadata.inputTokens != null) {
               currentSpan.setAttribute('llm.usage.input_tokens', finalMetadata.inputTokens);
             }
-            if (finalMetadata.outputTokens) {
+            if (finalMetadata.outputTokens != null) {
               currentSpan.setAttribute('llm.usage.output_tokens', finalMetadata.outputTokens);
             }
-            if (finalMetadata.totalTokens) {
+            if (finalMetadata.totalTokens != null) {
               currentSpan.setAttribute('llm.usage.total_tokens', finalMetadata.totalTokens);
             }
             if (finalMetadata.estimatedCost !== undefined) {
@@ -225,7 +229,7 @@ export function traceLLM(options: TraceLLMOptions = {}): any {
             const duration = endTime - startTime;
             currentSpan.setAttribute('llm.response_time_ms', duration);
 
-            if (finalMetadata.totalTokens && duration > 0) {
+            if (finalMetadata.totalTokens != null && duration > 0) {
               const tokensPerSecond =
                 Math.round((finalMetadata.totalTokens / duration) * 1000 * 100) / 100;
               currentSpan.setAttribute('llm.tokens_per_second', tokensPerSecond);

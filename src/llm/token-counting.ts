@@ -12,6 +12,7 @@ import { TokenCountingError, ModelNotFoundError } from './types.js';
 // Dynamic import for tiktoken to handle environments where it's not available
 let tiktoken: any = null;
 let tiktokenLoaded = false;
+let tiktokenLoadingPromise: Promise<any> | null = null;
 
 /**
  * Lazy load tiktoken to avoid issues in environments where it's not available
@@ -19,15 +20,23 @@ let tiktokenLoaded = false;
 async function loadTiktoken() {
   if (tiktokenLoaded) return tiktoken;
 
-  try {
-    tiktoken = await import('@dqbd/tiktoken');
-    tiktokenLoaded = true;
-    return tiktoken;
-  } catch {
-    console.warn('tiktoken not available, falling back to heuristic counting for OpenAI models');
-    tiktokenLoaded = true;
-    return null;
+  if (tiktokenLoadingPromise) {
+    return tiktokenLoadingPromise;
   }
+
+  tiktokenLoadingPromise = (async () => {
+    try {
+      tiktoken = await import('@dqbd/tiktoken');
+      tiktokenLoaded = true;
+      return tiktoken;
+    } catch {
+      console.warn('tiktoken not available, falling back to heuristic counting for OpenAI models');
+      tiktokenLoaded = true;
+      return null;
+    }
+  })();
+
+  return tiktokenLoadingPromise;
 }
 
 /**

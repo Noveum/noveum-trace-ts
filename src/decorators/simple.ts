@@ -14,26 +14,26 @@ function safeSerialize(value: any): string {
     return String(value);
   }
 
-  if (typeof value === 'object') {
-    try {
+  try {
+    if (typeof value === 'object') {
+      const seen = new WeakSet();
       return JSON.stringify(value, (_key, val) => {
-        // Handle circular references by replacing with a marker
         if (typeof val === 'object' && val !== null) {
-          if (val.constructor === Object || Array.isArray(val)) {
-            return val;
-          }
-          return '[Object]';
+          if (seen.has(val)) return '[Circular]';
+          seen.add(val);
+          // Collapse non-plain objects to avoid huge payloads
+          if (!(val.constructor === Object || Array.isArray(val))) return '[Object]';
         }
         return val;
       });
-    } catch {
-      console.error('Error serializing value:', value);
-      // Fallback for circular references or other JSON errors
-      return '[Complex Object]';
     }
+    return String(value);
+  } catch (e) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('[Noveum] Error serializing value:', e instanceof Error ? e.message : e);
+    }
+    return '[Unserializable]';
   }
-
-  return String(value);
 }
 
 /**

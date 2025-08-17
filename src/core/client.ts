@@ -127,6 +127,7 @@ export class NoveumClient {
 
     const spanId = this._generateId();
     const activeTrace = getGlobalContextManager().getActiveTrace() as Trace | undefined;
+    const activeParentSpan = getGlobalContextManager().getActiveSpan() as Span | undefined;
     const traceId = options.trace_id || activeTrace?.traceId || this._generateId();
 
     // Check sampling
@@ -134,11 +135,17 @@ export class NoveumClient {
       return this._createNoOpSpan(name, traceId);
     }
 
-    const span = new Span(spanId, name, {
+    const resolvedParentId = options.parent_span_id ?? activeParentSpan?.spanId;
+    const spanOptions: any = {
       ...options,
       trace_id: traceId,
       client: this,
-    });
+    };
+    if (resolvedParentId !== undefined) {
+      spanOptions.parent_span_id = resolvedParentId;
+    }
+
+    const span = new Span(spanId, name, spanOptions);
 
     // Set as active span in context
     getGlobalContextManager().setActiveSpan(span);

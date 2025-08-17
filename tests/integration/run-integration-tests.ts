@@ -7,6 +7,7 @@
 
 import { runIntegrationTests } from './api-integration.test.js';
 import { FrameworkIntegrationTestSuite } from './framework-integration.test.js';
+import { runAgentRagIntegrationTests } from './agent-rag-integration.test.js';
 import { config } from 'dotenv';
 
 // Load environment variables
@@ -82,6 +83,11 @@ async function runAllIntegrationTests() {
     console.log('-'.repeat(50));
     const frameworkSuite = new FrameworkIntegrationTestSuite();
     await frameworkSuite.runAllTests();
+
+    // Run Agent + RAG Integration Test
+    console.log('\n🤖 Phase 3: Agent + RAG Integration Test');
+    console.log('-'.repeat(50));
+    await runAgentRagIntegrationTests();
 
     console.log('\n✅ All integration test phases completed successfully!');
   } catch (error) {

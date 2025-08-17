@@ -179,7 +179,7 @@ export class OpenAIInstrumentation extends BaseInstrumentation {
           // Count tokens if enabled
           if (context.config.countTokens && params.model) {
             try {
-              const totalTokens = 0;
+              // Token counting currently disabled here (async); skip setting prompt_tokens
               for (const msg of params.messages) {
                 if (msg.content && typeof msg.content === 'string') {
                   // Token counting temporarily disabled to fix build
@@ -188,7 +188,7 @@ export class OpenAIInstrumentation extends BaseInstrumentation {
                   // totalTokens += typeof tokenCount === 'object' ? tokenCount.token_count : tokenCount;
                 }
               }
-              metadata['llm.usage.prompt_tokens'] = totalTokens;
+              // Intentionally do not set llm.usage.prompt_tokens here
             } catch (error) {
               console.warn('Failed to estimate token count:', error);
             }

@@ -91,7 +91,7 @@ const DEFAULT_OPTIONS: Required<PIIRedactionOptions> = {
   partialRedaction: false,
   partialShowCount: 4,
   customPatterns: {},
-  enabledTypes: Object.values(PIIType),
+  enabledTypes: Object.values(PIIType) as PIIType[],
   enableValidation: true,
 };
 

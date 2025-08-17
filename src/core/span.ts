@@ -31,7 +31,8 @@ export class Span implements ISpan {
     this._trace = trace;
     this._spanId = generateSpanId();
     this._traceId = trace.traceId;
-    this._parentSpanId = options.parent_span_id;
+    // Normalize parent to undefined when null/empty
+    this._parentSpanId = (options.parent_span_id ?? undefined) || undefined;
     this._name = name;
     this._kind = options.kind ?? SpanKind.INTERNAL;
     this._startTime = options.start_time ?? new Date();
