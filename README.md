@@ -38,11 +38,11 @@ pnpm add @noveum/trace
 ### 1. Initialize the Client
 
 ```typescript
-import { initializeClient } from '@noveum/trace';
+import { createClient } from '@noveum/trace';
 
-const client = initializeClient({
+const client = createClient({
   apiKey: process.env.NOVEUM_API_KEY,
-  project: 'my-ai-app',
+  project: 'my-ai-app', // Your service/application name
   environment: 'production',
 });
 ```
@@ -223,17 +223,17 @@ span.setStatus('ERROR', 'Rate limit exceeded');
 
 ```bash
 NOVEUM_API_KEY=your-api-key
-NOVEUM_PROJECT=my-project
-NOVEUM_ENVIRONMENT=production
+NOVEUM_PROJECT=my-service-name        # Your service/application name
+NOVEUM_ENVIRONMENT=production         # Environment (dev, staging, prod)
 NOVEUM_ENDPOINT=https://api.noveum.ai/api/v1/traces
 ```
 
 ### Client Options
 
 ```typescript
-const client = initializeClient({
+const client = createClient({
   apiKey: 'your-api-key',
-  project: 'my-project',
+  project: 'my-service-name', // Your service/application identifier
   environment: 'production',
 
   // Batching and performance
@@ -272,8 +272,9 @@ const client = initializeClient({
 ```typescript
 import { RateSampler, AlwaysSampler } from '@noveum/trace';
 
-const client = initializeClient({
+const client = createClient({
   apiKey: 'your-api-key',
+  project: 'my-service-name', // Your service/application identifier
   sampling: {
     rate: 0.1, // Default 10% sampling
     rules: [

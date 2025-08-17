@@ -84,6 +84,16 @@ npm run release:minor  # Force minor version bump
 npm run release:patch  # Force patch version bump
 ```
 
+## Release
+
+npm run release:patch (or :minor, :major) to update version + CHANGELOG.md + tag.
+
+` npm run release:patch`
+
+`git push --follow-tags origin main && npm publish`
+
+npm publish (public scope handled by publishConfig).
+
 ## 🏗️ Project Structure
 
 ```

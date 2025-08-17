@@ -6,7 +6,7 @@
  */
 
 // Core exports
-export { NoveumClient } from './core/client.js';
+export { NoveumClient, initializeClient, getGlobalClient } from './core/client.js';
 export { StandaloneSpan as Span } from './core/span-standalone.js';
 export { StandaloneTrace as Trace } from './core/trace-standalone.js';
 
