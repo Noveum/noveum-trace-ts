@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.1.0](https://github.com/Noveum/noveum-trace-ts/compare/v1.0.6...v1.1.0) (2025-08-17)
+
+### 🐛 Bug Fixes
+
+- add more tests ([cfd5d68](https://github.com/Noveum/noveum-trace-ts/commit/cfd5d6865376b171d31a7d219cf0e9b6bd01b019))
+- fix bugs ([2c15c5a](https://github.com/Noveum/noveum-trace-ts/commit/2c15c5aae8e53d5123dd31358d4004ad36d5d304))
+- fix bugs ([32385ac](https://github.com/Noveum/noveum-trace-ts/commit/32385ac911ad287eb96ef6f4d3ae86294b61e7c0))
+- fix bugs ([556ca6e](https://github.com/Noveum/noveum-trace-ts/commit/556ca6e2265ff5a6935f1d3772a12ab03473d34c))
+- fix bugs ([6962af5](https://github.com/Noveum/noveum-trace-ts/commit/6962af5fc326fc0fea8a40bdccfda10ec1fd54d2))
+- fix tests ([857aa0f](https://github.com/Noveum/noveum-trace-ts/commit/857aa0fa587397bfba52a319e53659364f653891))
+- fix tests ([174f766](https://github.com/Noveum/noveum-trace-ts/commit/174f766cbf68ceb30e2786896653148541ad838f))
+- lint ([30454ce](https://github.com/Noveum/noveum-trace-ts/commit/30454ce34623e94ee25570e937d249e16c7c1431))
+- readme ([eda5f6d](https://github.com/Noveum/noveum-trace-ts/commit/eda5f6ddffe046281b05a21ea07c048379e4b3d7))
+
 ### [1.0.6](https://github.com/Noveum/noveum-trace-ts/compare/v1.0.5...v1.0.6) (2025-08-17)
 
 ### 🐛 Bug Fixes
