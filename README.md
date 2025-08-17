@@ -41,7 +41,7 @@ pnpm add @noveum/trace
 import { createClient } from '@noveum/trace';
 
 const client = createClient({
-  apiKey: process.env.NOVEUM_API_KEY,
+  apiKey: process.env.NOVEUM_API_KEY!,
   project: 'my-ai-app', // Your service/application name
   environment: 'production',
 });
@@ -49,28 +49,44 @@ const client = createClient({
 
 ### 2. Basic Tracing
 
+Use the client helpers for scoped tracing of async functions, or manage spans/traces manually for more control.
+
 ```typescript
-import { trace, span } from '@noveum/trace';
+import { SpanStatus } from '@noveum/trace';
 
-// Trace a complete operation
-const result = await trace('user-query-processing', async traceInstance => {
-  traceInstance.setAttribute('user.id', userId);
-  traceInstance.setAttribute('query.type', 'search');
-
+// Scoped tracing with helpers
+const result = await client.trace('user-query-processing', async () => {
   // Create spans for sub-operations
-  const embeddings = await span('generate-embeddings', async () => {
+  const embeddings = await client.span('generate-embeddings', async () => {
     return await openai.embeddings.create({
       model: 'text-embedding-ada-002',
       input: userQuery,
     });
   });
 
-  const searchResults = await span('vector-search', async () => {
+  const searchResults = await client.span('vector-search', async () => {
     return await vectorDB.search(embeddings.data[0].embedding);
   });
 
   return searchResults;
 });
+
+// Manual span with attributes and status
+const span = await client.startSpan('vector-embedding');
+try {
+  const embeddings = await openai.embeddings.create({
+    model: 'text-embedding-ada-002',
+    input: userQuery,
+  });
+  span.setAttribute('model.name', 'text-embedding-ada-002');
+  span.setAttribute('input.length', userQuery.length);
+  span.setStatus(SpanStatus.OK);
+} catch (err) {
+  span.setStatus(SpanStatus.ERROR, err instanceof Error ? err.message : String(err));
+  throw err;
+} finally {
+  await span.finish();
+}
 ```
 
 ### 3. Using Decorators
@@ -202,6 +218,8 @@ await span.finish();
 Add context and metadata to your traces:
 
 ```typescript
+import { SpanStatus } from '@noveum/trace';
+
 // Set attributes
 span.setAttribute('llm.model', 'gpt-4');
 span.setAttribute('llm.tokens.input', 150);
@@ -213,8 +231,8 @@ span.addEvent('cache-miss', {
   'cache.ttl': 3600,
 });
 
-// Set status
-span.setStatus('ERROR', 'Rate limit exceeded');
+// Set status using enum
+span.setStatus(SpanStatus.ERROR, 'Rate limit exceeded');
 ```
 
 ## ⚙️ Configuration
@@ -296,17 +314,16 @@ const client = createClient({
 ```typescript
 import { getGlobalContextManager } from '@noveum/trace';
 
-const contextManager = getGlobalContextManager();
+const cm = getGlobalContextManager();
 
 // Set current span in context
-contextManager.setCurrentSpan(span);
+cm.setActiveSpan(span);
 
 // Get current span from context
-const currentSpan = contextManager.getCurrentSpan();
+const currentSpan = cm.getActiveSpan();
 
-// Run function with span context
-await contextManager.withSpan(span, async () => {
-  // This function runs with span in context
+// Run function with span context (async)
+await cm.withSpanAsync(span, async () => {
   await someOperation();
 });
 ```
@@ -314,21 +331,22 @@ await contextManager.withSpan(span, async () => {
 ### Error Handling
 
 ```typescript
+import { SpanStatus } from '@noveum/trace';
+
 const span = await client.startSpan('risky-operation');
 
 try {
   const result = await riskyOperation();
   span.setAttribute('operation.result', 'success');
-  span.setStatus('OK');
+  span.setStatus(SpanStatus.OK);
   return result;
 } catch (error) {
   span.setAttribute('operation.result', 'error');
-  span.setStatus('ERROR', error.message);
+  span.setStatus(SpanStatus.ERROR, error instanceof Error ? error.message : String(error));
 
   span.addEvent('error', {
-    'error.type': error.constructor.name,
-    'error.message': error.message,
-    'error.stack': error.stack,
+    'error.type': error instanceof Error ? error.constructor.name : 'Error',
+    'error.message': error instanceof Error ? error.message : String(error),
   });
 
   throw error;
@@ -453,28 +471,28 @@ class AIAgent {
 ### Batch Processing
 
 ```typescript
+import { SpanStatus } from '@noveum/trace';
+
 class DocumentProcessor {
   @trace('batch-processing')
   async processBatch(documents: Document[]) {
     const results = [];
 
     for (const doc of documents) {
-      const result = await span('process-document', async spanInstance => {
-        spanInstance.setAttribute('document.id', doc.id);
-        spanInstance.setAttribute('document.type', doc.type);
-        spanInstance.setAttribute('document.size', doc.content.length);
-
-        try {
-          const processed = await this.processDocument(doc);
-          spanInstance.setStatus('OK');
-          return processed;
-        } catch (error) {
-          spanInstance.setStatus('ERROR', error.message);
-          throw error;
-        }
-      });
-
-      results.push(result);
+      const span = await client.startSpan('process-document');
+      try {
+        span.setAttribute('document.id', doc.id);
+        span.setAttribute('document.type', doc.type);
+        span.setAttribute('document.size', doc.content.length);
+        const processed = await this.processDocument(doc);
+        span.setStatus(SpanStatus.OK);
+        results.push(processed);
+      } catch (error) {
+        span.setStatus(SpanStatus.ERROR, error instanceof Error ? error.message : String(error));
+        throw error;
+      } finally {
+        await span.finish();
+      }
     }
 
     return results;

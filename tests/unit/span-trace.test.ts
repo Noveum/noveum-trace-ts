@@ -290,8 +290,8 @@ describe('Span (from trace.ts)', () => {
         attributes: { 'child.key': 'child.value' },
       });
 
-      expect(childSpan.kind).toBe(SpanKind.SERVER);
-      expect(childSpan.attributes).toEqual({ 'child.key': 'child.value' });
+      expect((childSpan as Span).kind).toBe(SpanKind.SERVER);
+      expect((childSpan as Span).attributes).toEqual({ 'child.key': 'child.value' });
     });
   });
 
