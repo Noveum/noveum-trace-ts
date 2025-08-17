@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.0.6](https://github.com/Noveum/noveum-trace-ts/compare/v1.0.5...v1.0.6) (2025-08-17)
+
+### 🐛 Bug Fixes
+
+- fix release job ([427c7f9](https://github.com/Noveum/noveum-trace-ts/commit/427c7f939437250d8959a5f5361da71c48ad478c))
+
 ### [1.0.5](https://github.com/Noveum/noveum-trace-ts/compare/v1.0.4...v1.0.5) (2025-08-17)
 
 ### 🐛 Bug Fixes
