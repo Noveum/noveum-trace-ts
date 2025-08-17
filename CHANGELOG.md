@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.0.3](https://github.com/Noveum/noveum-trace-ts/compare/v1.0.2...v1.0.3) (2025-08-17)
+
+### 🔄 Continuous Integration
+
+- **deps:** bump snyk/actions ([03c596c](https://github.com/Noveum/noveum-trace-ts/commit/03c596cda74eec55b517c5df9c0a2476ee0ea5e5))
+
+### 🐛 Bug Fixes
+
+- fix ci/cd badge in README ([878b8e5](https://github.com/Noveum/noveum-trace-ts/commit/878b8e5019c5f6a0875a96d45731e2b0a19a8bd6))
+- fix ci/cd badge in README ([db8b409](https://github.com/Noveum/noveum-trace-ts/commit/db8b4095f5ed9e2a0c414ef057c95a4175369891))
+- fix docs ([c1186f0](https://github.com/Noveum/noveum-trace-ts/commit/c1186f04bf7c59f05b44ff7fb32fc72c1f4209fd))
+- fix docs ([b2015a9](https://github.com/Noveum/noveum-trace-ts/commit/b2015a96d70fd40f3576d9b36c8da8f977789f41))
+
 ### [1.0.2](https://github.com/Noveum/noveum-trace-ts/compare/v1.0.1...v1.0.2) (2025-07-29)
 
 ### 🐛 Bug Fixes
