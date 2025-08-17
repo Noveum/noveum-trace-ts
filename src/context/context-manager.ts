@@ -175,11 +175,7 @@ export class ContextManager implements IContextManager {
       spanStack: [...context.spanStack, span],
     });
 
-    let result!: T;
-    (this._asyncLocalStorage as any).run(newContext, () => {
-      result = fn();
-    });
-    return result;
+    return this.runWithContext(newContext, fn);
   }
 
   async withSpanAsync<T>(span: ISpan, fn: () => Promise<T>): Promise<T> {
@@ -189,11 +185,7 @@ export class ContextManager implements IContextManager {
       spanStack: [...context.spanStack, span],
     });
 
-    return new Promise<T>((resolve, reject) => {
-      (this._asyncLocalStorage as any).run(newContext, () => {
-        Promise.resolve(fn()).then(resolve).catch(reject);
-      });
-    });
+    return this.runWithContextAsync(newContext, fn);
   }
 
   getActiveTrace(): ITrace | undefined {
@@ -213,11 +205,7 @@ export class ContextManager implements IContextManager {
       spanStack: [], // Reset span stack for new trace
     });
 
-    let result!: T;
-    (this._asyncLocalStorage as any).run(newContext, () => {
-      result = fn();
-    });
-    return result;
+    return this.runWithContext(newContext, fn);
   }
 
   async withTraceAsync<T>(trace: ITrace, fn: () => Promise<T>): Promise<T> {
@@ -227,11 +215,7 @@ export class ContextManager implements IContextManager {
       spanStack: [], // Reset span stack for new trace
     });
 
-    return new Promise<T>((resolve, reject) => {
-      (this._asyncLocalStorage as any).run(newContext, () => {
-        Promise.resolve(fn()).then(resolve).catch(reject);
-      });
-    });
+    return this.runWithContextAsync(newContext, fn);
   }
 
   /**
@@ -244,18 +228,9 @@ export class ContextManager implements IContextManager {
       previousContext: currentContext.copy(),
     };
 
-    // Create a new context instead of mutating the current one
-    const newContext = currentContext.copy({
-      activeTrace: trace,
-      spanStack: [],
-    });
-
-    const als: any = this._asyncLocalStorage as any;
-    if (typeof als.enterWith === 'function') {
-      als.enterWith(newContext);
-    } else {
-      this._fallbackContext = newContext;
-    }
+    // Update the context directly
+    currentContext.activeTrace = trace;
+    currentContext.spanStack = [];
 
     return token;
   }
@@ -264,13 +239,14 @@ export class ContextManager implements IContextManager {
    * Detach trace using token (Python SDK style)
    */
   detachTrace(token: ContextToken): void {
-    const restored = token.previousContext.copy();
-    const als: any = this._asyncLocalStorage as any;
-    if (typeof als.enterWith === 'function') {
-      als.enterWith(restored);
-    } else {
-      this._fallbackContext = restored;
-    }
+    const currentContext = this.getCurrentContext();
+    const restored = token.previousContext;
+
+    // Restore the previous context state
+    currentContext.activeTrace = restored.activeTrace;
+    currentContext.activeSpan = restored.activeSpan;
+    currentContext.spanStack = [...restored.spanStack];
+    currentContext.attributes = { ...restored.attributes };
   }
 
   /**
@@ -283,6 +259,7 @@ export class ContextManager implements IContextManager {
       previousContext: currentContext.copy(),
     };
 
+    // Update the context directly
     currentContext.activeSpan = span;
     currentContext.spanStack = [...currentContext.spanStack, span];
 
@@ -293,19 +270,14 @@ export class ContextManager implements IContextManager {
    * Detach span using token (Python SDK style)
    */
   detachSpan(token: ContextToken): void {
-    const restored = token.previousContext.copy();
-    // Mutate current store as an extra safety to ensure visibility across environments
     const currentContext = this.getCurrentContext();
+    const restored = token.previousContext;
+
+    // Restore the previous context state
     currentContext.activeTrace = restored.activeTrace;
     currentContext.activeSpan = restored.activeSpan;
     currentContext.spanStack = [...restored.spanStack];
     currentContext.attributes = { ...restored.attributes };
-    const als: any = this._asyncLocalStorage as any;
-    if (typeof als.enterWith === 'function') {
-      als.enterWith(restored);
-    } else {
-      this._fallbackContext = restored;
-    }
   }
 
   /**
@@ -344,6 +316,20 @@ export class ContextManager implements IContextManager {
   clear(): void {
     const context = this.getCurrentContext();
     context.clear();
+  }
+
+  /**
+   * Run a function with a specific context
+   */
+  runWithContext<T>(context: TraceContext, fn: () => T): T {
+    return (this._asyncLocalStorage as any).run(context, fn);
+  }
+
+  /**
+   * Run an async function with a specific context
+   */
+  async runWithContextAsync<T>(context: TraceContext, fn: () => Promise<T>): Promise<T> {
+    return (this._asyncLocalStorage as any).run(context, fn);
   }
 
   /**
@@ -593,7 +579,7 @@ export async function withCleanContext<T>(fn: () => Promise<T>): Promise<T> {
   const contextManager = getGlobalContextManager();
   const emptyContext = new TraceContext();
 
-  return contextManager['_asyncLocalStorage'].run(emptyContext, fn);
+  return contextManager.runWithContextAsync(emptyContext, fn);
 }
 
 /**
@@ -636,7 +622,7 @@ export function setCurrentTrace(trace: ITrace): void {
  */
 export function withContext<T>(context: TraceContext, fn: () => T): T {
   const contextManager = getGlobalContextManager();
-  return contextManager['_asyncLocalStorage'].run(context, fn);
+  return contextManager.runWithContext(context, fn);
 }
 
 /**
@@ -644,7 +630,7 @@ export function withContext<T>(context: TraceContext, fn: () => T): T {
  */
 export async function withContextAsync<T>(context: TraceContext, fn: () => Promise<T>): Promise<T> {
   const contextManager = getGlobalContextManager();
-  return contextManager['_asyncLocalStorage'].run(context, fn);
+  return contextManager.runWithContextAsync(context, fn);
 }
 
 /**

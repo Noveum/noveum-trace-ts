@@ -82,7 +82,7 @@
     "test:integration:framework": "NODE_ENV=test npx tsx tests/integration/framework-integration.test.ts",
     "test:smoke": "NODE_ENV=test npx tsx tests/integration/run-integration-tests.ts smoke",
     "test:ui": "vitest --ui",
-    "test:watch": "vitest --watch",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
   "lint-staged": {

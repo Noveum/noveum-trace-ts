@@ -323,10 +323,24 @@ export class StandaloneTrace implements ITrace {
     const serializedSpans = this._spans.map(span => span.serialize());
 
     // Calculate error count from serialized spans
-    const errorCount = serializedSpans.filter(span => span.status === SpanStatus.ERROR).length;
+    const errorCount = serializedSpans.filter(span => span.status === 'error').length;
 
-    // Status is already in Python SDK format (enum values are strings)
-    const status = this._status;
+    // Convert status enum to Python-compatible string
+    const status = ((): 'ok' | 'error' | 'unset' | 'timeout' | 'cancelled' => {
+      switch (this._status) {
+        case SpanStatus.OK:
+          return 'ok';
+        case SpanStatus.ERROR:
+          return 'error';
+        case SpanStatus.TIMEOUT:
+          return 'timeout';
+        case SpanStatus.CANCELLED:
+          return 'cancelled';
+        case SpanStatus.UNSET:
+        default:
+          return 'unset';
+      }
+    })();
 
     return {
       trace_id: this._traceId,

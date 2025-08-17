@@ -472,6 +472,11 @@ describe('Global functions', () => {
 });
 
 describe('traceContext generator', () => {
+  beforeEach(() => {
+    // Clear global context
+    getGlobalContextManager().clear();
+  });
+
   it('should yield context with provided values', () => {
     const trace = new MockTrace('trace-1', 'test-trace');
     const span = new MockSpan('span-1', 'trace-1', 'test-span');

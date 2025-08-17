@@ -350,7 +350,7 @@ const transport = new HttpTransport(
   },
   {
     apiKey: 'your-api-key',
-    endpoint: 'https://api.noveum.ai/api/v1/traces',
+    endpoint: 'https://api.noveum.ai/api',
   }
 );
 ```

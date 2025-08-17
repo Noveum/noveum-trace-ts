@@ -3,7 +3,7 @@
  */
 
 import type { NoveumClientOptions, TraceOptions, SpanOptions, TraceBatch } from './types.js';
-import { SpanStatus } from './types.js';
+// Note: Import intentionally omitted since SpanStatus is not used in this module
 import { StandaloneTrace as Trace } from './trace-standalone.js';
 import { StandaloneSpan as Span } from './span-standalone.js';
 import { HttpTransport } from '../transport/http-transport.js';
@@ -17,7 +17,7 @@ import { generateSpanId, getSdkVersion, formatPythonCompatibleTimestamp } from '
 const DEFAULT_OPTIONS: Required<Omit<NoveumClientOptions, 'apiKey'>> = {
   project: 'default',
   environment: 'development',
-  endpoint: 'https://api.noveum.ai/api/v1/traces',
+  endpoint: 'https://api.noveum.ai/api',
   enabled: true,
   batchSize: 100,
   flushInterval: 5000,
@@ -60,6 +60,7 @@ export class NoveumClient {
       apiKey: this._config.apiKey,
       timeout: this._config.timeout,
       maxRetries: this._config.retryAttempts,
+      debug: this._config.debug,
     });
 
     // this._contextManager = new ContextManager();
@@ -323,8 +324,16 @@ export class NoveumClient {
    */
   private _startFlushTimer(): void {
     this._flushTimer = setInterval(() => {
+      const tasks: Promise<void>[] = [];
       if (this._pendingSpans.length > 0) {
-        this._flushPendingSpans().catch(error => {
+        tasks.push(this._flushPendingSpans());
+      }
+      if (this._pendingTraces.length > 0) {
+        tasks.push(this._flushPendingTraces());
+      }
+
+      if (tasks.length > 0) {
+        Promise.all(tasks).catch(error => {
           if (this._config.debug) {
             console.error('[Noveum] Error in flush timer:', error);
           }
@@ -379,13 +388,15 @@ export class NoveumClient {
 
       const durationMs = Math.max(0, endDate.getTime() - startDate.getTime());
 
+      const status: import('./types.js').SerializedTrace['status'] = hasError ? 'error' : 'ok';
+
       return {
         trace_id: traceId,
         name: rootSpan ? rootSpan.name : 'trace',
         start_time: formatPythonCompatibleTimestamp(startDate),
         end_time: formatPythonCompatibleTimestamp(endDate),
         duration_ms: durationMs,
-        status: hasError ? SpanStatus.ERROR : SpanStatus.OK,
+        status,
         status_message: null,
         span_count: serializedSpans.length,
         error_count: errorCount,
@@ -394,7 +405,7 @@ export class NoveumClient {
           user_id: null,
           session_id: null,
           request_id: null,
-          tags: {},
+          tags: {} as Record<string, string>,
           custom_attributes: {},
         },
         spans: serializedSpans,
@@ -409,7 +420,8 @@ export class NoveumClient {
 
     const batch: TraceBatch = {
       traces,
-      timestamp: Math.floor(Date.now() / 1000),
+      // Python SDK uses time.time() with fractional seconds
+      timestamp: Date.now() / 1000,
     };
 
     try {
@@ -436,7 +448,8 @@ export class NoveumClient {
 
     const batch: TraceBatch = {
       traces: tracesToFlush.map(trace => trace.serialize()),
-      timestamp: Math.floor(Date.now() / 1000),
+      // Python SDK uses time.time() with fractional seconds
+      timestamp: Date.now() / 1000,
     };
 
     try {

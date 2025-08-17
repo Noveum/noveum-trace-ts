@@ -213,13 +213,30 @@ export class Trace implements ITrace {
     const endTime = this._endTime || new Date();
     const duration = endTime.getTime() - this._startTime.getTime();
 
+    // Convert status enum to Python-compatible string
+    const status = ((): 'ok' | 'error' | 'unset' | 'timeout' | 'cancelled' => {
+      switch (this._status) {
+        case SpanStatus.OK:
+          return 'ok';
+        case SpanStatus.ERROR:
+          return 'error';
+        case SpanStatus.TIMEOUT:
+          return 'timeout';
+        case SpanStatus.CANCELLED:
+          return 'cancelled';
+        case SpanStatus.UNSET:
+        default:
+          return 'unset';
+      }
+    })();
+
     return {
       trace_id: this._traceId,
       name: this._name,
       start_time: this._startTime.toISOString(),
       end_time: this._endTime?.toISOString() || null,
       duration_ms: duration,
-      status: this._status,
+      status,
       status_message: null,
       span_count: this._spans.length,
       error_count: this._spans.filter(span => span.status === SpanStatus.ERROR).length,

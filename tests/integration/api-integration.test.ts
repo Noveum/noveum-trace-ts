@@ -9,7 +9,7 @@
  * - Response validation works
  */
 
-import { NoveumClient, formatPythonCompatibleTimestamp } from '../../src/index.js';
+import { NoveumClient, SpanStatus, formatPythonCompatibleTimestamp } from '../../src/index.js';
 import { config } from 'dotenv';
 
 // Load environment variables
@@ -24,7 +24,7 @@ function formatError(error: unknown): string {
 
 const API_KEY = process.env.NOVEUM_API_KEY;
 const PROJECT = process.env.NOVEUM_PROJECT || 'noveum-trace-ts';
-const ENVIRONMENT = process.env.NOVEUM_ENVIRONMENT || 'integration-test';
+const ENVIRONMENT = process.env.NOVEUM_ENVIRONMENT || 'test-integ';
 const ENDPOINT = process.env.NOVEUM_ENDPOINT || 'https://api.noveum.ai/api';
 
 // Skip tests if no API key is available
@@ -166,7 +166,7 @@ class IntegrationTestSuite {
     await this.runTest('Batch Trace Submission', async () => {
       if (!this.client) throw new Error('Client not initialized');
 
-      const traces = [];
+      const traces: Array<ReturnType<NoveumClient['createTrace']> extends Promise<infer T> ? T : never> = [] as any;
       const batchSize = 5;
 
       // Create multiple traces
@@ -214,7 +214,7 @@ class IntegrationTestSuite {
 
       // Create multiple spans to simulate a complex workflow
       const researchSpan = await this.client.startSpan('research-phase', {
-        traceId: trace.traceId,
+        trace_id: trace.traceId,
         attributes: {
           'agent.type': 'researcher',
           phase: 'research',
@@ -230,7 +230,7 @@ class IntegrationTestSuite {
       await researchSpan.finish();
 
       const analysisSpan = await this.client.startSpan('analysis-phase', {
-        traceId: trace.traceId,
+        trace_id: trace.traceId,
         attributes: {
           'agent.type': 'analyst',
           phase: 'analysis',
@@ -271,7 +271,7 @@ class IntegrationTestSuite {
       });
 
       const span = await this.client.startSpan('error-simulation', {
-        traceId: trace.traceId,
+        trace_id: trace.traceId,
         attributes: {
           operation: 'simulate-error',
         },
@@ -283,7 +283,7 @@ class IntegrationTestSuite {
       } catch (error) {
         span.recordException(error);
         span.setAttribute('error.handled', true);
-        trace.setStatus('ERROR');
+        trace.setStatus(SpanStatus.ERROR);
       }
 
       await span.finish();
@@ -333,7 +333,7 @@ class IntegrationTestSuite {
       if (!this.client) throw new Error('Client not initialized');
 
       const concurrentCount = 3;
-      const promises = [];
+      const promises: Promise<string>[] = [];
 
       for (let i = 0; i < concurrentCount; i++) {
         const promise = (async () => {
