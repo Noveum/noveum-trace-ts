@@ -361,7 +361,7 @@ export function traced(client: INoveumClient, spanName?: string) {
 
       // Create child span for the handler
       const childSpan = await client.startSpan(childSpanName, {
-        parentSpanId: currentSpan.spanId,
+        parent_span_id: currentSpan.spanId,
       });
 
       const result = await getGlobalContextManager().withSpanAsync(childSpan, async () => {

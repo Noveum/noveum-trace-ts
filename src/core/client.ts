@@ -3,12 +3,13 @@
  */
 
 import type { NoveumClientOptions, TraceOptions, SpanOptions, TraceBatch } from './types.js';
+// Note: Import intentionally omitted since SpanStatus is not used in this module
 import { StandaloneTrace as Trace } from './trace-standalone.js';
 import { StandaloneSpan as Span } from './span-standalone.js';
 import { HttpTransport } from '../transport/http-transport.js';
 import { getGlobalContextManager } from '../context/context-manager.js';
 import { Sampler } from './sampler.js';
-import { generateSpanId, getSdkVersion } from '../utils/index.js';
+import { generateSpanId, getSdkVersion, formatPythonCompatibleTimestamp } from '../utils/index.js';
 
 /**
  * Default client configuration
@@ -16,7 +17,7 @@ import { generateSpanId, getSdkVersion } from '../utils/index.js';
 const DEFAULT_OPTIONS: Required<Omit<NoveumClientOptions, 'apiKey'>> = {
   project: 'default',
   environment: 'development',
-  endpoint: 'https://api.noveum.ai/api/v1/traces',
+  endpoint: 'https://api.noveum.ai/api',
   enabled: true,
   batchSize: 100,
   flushInterval: 5000,
@@ -39,6 +40,7 @@ export class NoveumClient {
   // private readonly _contextManager: ContextManager;
   private readonly _sampler: Sampler;
   private readonly _pendingSpans: Span[] = [];
+  private readonly _pendingTraces: Trace[] = [];
   private _flushTimer: NodeJS.Timeout | undefined;
   private _isShutdown = false;
 
@@ -53,16 +55,13 @@ export class NoveumClient {
       apiKey: options.apiKey,
     };
 
-    this._transport = new HttpTransport(
-      {
-        timeout: this._config.timeout,
-        maxRetries: this._config.retryAttempts,
-      },
-      {
-        endpoint: this._config.endpoint,
-        apiKey: this._config.apiKey,
-      }
-    );
+    this._transport = new HttpTransport({
+      endpoint: this._config.endpoint,
+      apiKey: this._config.apiKey,
+      timeout: this._config.timeout,
+      maxRetries: this._config.retryAttempts,
+      debug: this._config.debug,
+    });
 
     // this._contextManager = new ContextManager();
     this._sampler = new Sampler(this._config.sampling);
@@ -94,7 +93,7 @@ export class NoveumClient {
       return this._createNoOpTrace(name);
     }
 
-    const traceId = options.traceId || this._generateId();
+    const traceId = options.trace_id || this._generateId();
 
     // Check sampling
     if (!this._sampler.shouldSample(traceId, name)) {
@@ -121,22 +120,44 @@ export class NoveumClient {
    */
   async startSpan(name: string, options: SpanOptions = {}): Promise<Span> {
     if (!this._config.enabled || this._isShutdown) {
-      return this._createNoOpSpan(name, options.traceId || this._generateId());
+      const activeTraceId = (getGlobalContextManager().getActiveTrace() as Trace | undefined)
+        ?.traceId;
+      return this._createNoOpSpan(name, options.trace_id || activeTraceId || this._generateId());
     }
 
     const spanId = this._generateId();
-    const traceId = options.traceId || this._generateId();
+    const activeTrace = getGlobalContextManager().getActiveTrace() as Trace | undefined;
+    const activeParentSpan = getGlobalContextManager().getActiveSpan() as Span | undefined;
+    const traceId = options.trace_id || activeTrace?.traceId || this._generateId();
 
     // Check sampling
     if (!this._sampler.shouldSample(traceId, name)) {
       return this._createNoOpSpan(name, traceId);
     }
 
-    const span = new Span(spanId, name, {
+    // Determine parent span:
+    // - Prefer explicitly provided parent_span_id
+    // - Otherwise, only inherit the currently active span if it belongs to the same trace
+    //   and is not finished (to avoid accidental cross-test/context leakage)
+    let resolvedParentId = options.parent_span_id;
+    if (
+      resolvedParentId === undefined &&
+      activeParentSpan &&
+      activeParentSpan.traceId === traceId &&
+      !activeParentSpan.isFinished
+    ) {
+      resolvedParentId = activeParentSpan.spanId;
+    }
+    const spanOptions: any = {
       ...options,
-      traceId,
+      trace_id: traceId,
       client: this,
-    });
+    };
+    if (resolvedParentId !== undefined) {
+      spanOptions.parent_span_id = resolvedParentId;
+    }
+
+    const span = new Span(spanId, name, spanOptions);
 
     // Set as active span in context
     getGlobalContextManager().setActiveSpan(span);
@@ -168,14 +189,33 @@ export class NoveumClient {
   }
 
   /**
-   * Flush all pending spans
+   * Add a finished trace to the pending queue
    */
-  async flush(): Promise<void> {
-    if (this._pendingSpans.length === 0) {
+  _addFinishedTrace(trace: any): void {
+    if (this._isShutdown) {
       return;
     }
 
-    await this._flushPendingSpans();
+    this._pendingTraces.push(trace);
+
+    if (this._pendingTraces.length >= this._config.batchSize) {
+      this._flushPendingTraces().catch(error => {
+        if (this._config.debug) {
+          console.error('[Noveum] Error flushing traces:', error);
+        }
+      });
+    }
+  }
+
+  /**
+   * Flush all pending spans and traces
+   */
+  async flush(): Promise<void> {
+    if (this._pendingSpans.length === 0 && this._pendingTraces.length === 0) {
+      return;
+    }
+
+    await Promise.all([this._flushPendingSpans(), this._flushPendingTraces()]);
   }
 
   /**
@@ -303,8 +343,16 @@ export class NoveumClient {
    */
   private _startFlushTimer(): void {
     this._flushTimer = setInterval(() => {
+      const tasks: Promise<void>[] = [];
       if (this._pendingSpans.length > 0) {
-        this._flushPendingSpans().catch(error => {
+        tasks.push(this._flushPendingSpans());
+      }
+      if (this._pendingTraces.length > 0) {
+        tasks.push(this._flushPendingTraces());
+      }
+
+      if (tasks.length > 0) {
+        Promise.all(tasks).catch(error => {
           if (this._config.debug) {
             console.error('[Noveum] Error in flush timer:', error);
           }
@@ -314,7 +362,7 @@ export class NoveumClient {
   }
 
   /**
-   * Flush pending spans to the transport
+   * Flush pending spans to the transport (group by trace)
    */
   private async _flushPendingSpans(): Promise<void> {
     if (this._pendingSpans.length === 0) {
@@ -327,23 +375,119 @@ export class NoveumClient {
       console.log(`[Noveum] Flushing ${spansToFlush.length} spans`);
     }
 
-    const batch: TraceBatch = {
-      traces: spansToFlush.map(span => span.serialize()),
-      metadata: {
+    // Group spans by trace ID and convert to traces
+    const traceMap = new Map<string, Span[]>();
+    for (const s of spansToFlush) {
+      const tId = s.traceId;
+      if (!traceMap.has(tId)) traceMap.set(tId, []);
+      traceMap.get(tId)!.push(s);
+    }
+
+    // Convert span groups to trace format, excluding traces already queued as finished
+    const finishedTraceIds = new Set(this._pendingTraces.map(t => t.traceId));
+    const entries = Array.from(traceMap.entries()).filter(
+      ([traceId]) => !finishedTraceIds.has(traceId)
+    );
+    if (this._config.debug) {
+      const excluded = traceMap.size - entries.length;
+      if (excluded > 0) {
+        console.log(
+          `[Noveum] Skipping ${excluded} span-group(s) already enqueued as finished traces`
+        );
+      }
+    }
+    const traces = entries.map(([traceId, spanGroup]) => {
+      const serializedSpans = spanGroup.map(s => s.serialize());
+      const hasError = serializedSpans.some(s => s.status === 'error');
+      const errorCount = serializedSpans.filter(s => s.status === 'error').length;
+
+      const rootSpan = spanGroup.find(s => (s as any).isRootSpan?.()) || spanGroup[0];
+      const rootSerialized = serializedSpans.find(s => !s.parent_span_id) ?? serializedSpans[0];
+
+      // Compute overall start/end from Date objects with defensive defaults
+      const startDate = spanGroup.reduce(
+        (min, s) => (s.startTime < min ? s.startTime : min),
+        spanGroup[0]?.startTime || new Date()
+      );
+      const endDate = spanGroup.reduce(
+        (max, s) => {
+          const candidate = s.endTime ?? s.startTime;
+          return candidate > max ? candidate : max;
+        },
+        spanGroup[0]?.endTime ?? spanGroup[0]?.startTime ?? new Date()
+      );
+
+      const durationMs = Math.max(0, endDate.getTime() - startDate.getTime());
+
+      const status: import('./types.js').SerializedTrace['status'] = hasError ? 'error' : 'ok';
+
+      return {
+        trace_id: traceId,
+        name: rootSpan ? rootSpan.name : 'trace',
+        start_time: formatPythonCompatibleTimestamp(startDate),
+        end_time: formatPythonCompatibleTimestamp(endDate),
+        duration_ms: durationMs,
+        status,
+        status_message: null,
+        span_count: serializedSpans.length,
+        error_count: errorCount,
+        attributes: rootSerialized?.attributes || {},
+        metadata: {
+          user_id: null,
+          session_id: null,
+          request_id: null,
+          tags: {} as Record<string, string>,
+          custom_attributes: {},
+        },
+        spans: serializedSpans,
+        sdk: {
+          name: '@noveum/trace',
+          version: getSdkVersion(),
+        },
         project: this._config.project,
         environment: this._config.environment,
-        timestamp: new Date().toISOString(),
-        sdkVersion: getSdkVersion(),
-      },
+      };
+    });
+
+    const batch: TraceBatch = {
+      traces,
+      // Python SDK uses time.time() with fractional seconds
+      timestamp: Date.now() / 1000,
     };
 
     try {
       await this._transport.send(batch);
     } catch (error) {
-      if (this._config.debug) {
-        console.error('[Noveum] Failed to send batch:', error);
-      }
-      throw error;
+      console.error('[Noveum] Failed to send batch:', error);
+      // Don't re-throw to allow graceful error handling
+    }
+  }
+
+  /**
+   * Flush pending traces to the transport
+   */
+  private async _flushPendingTraces(): Promise<void> {
+    if (this._pendingTraces.length === 0) {
+      return;
+    }
+
+    const tracesToFlush = this._pendingTraces.splice(0);
+
+    if (this._config.debug) {
+      console.log(`[Noveum] Flushing ${tracesToFlush.length} traces`);
+    }
+
+    const batch: TraceBatch = {
+      traces: tracesToFlush.map(trace => trace.serialize()),
+      // Python SDK uses time.time() with fractional seconds
+      timestamp: Date.now() / 1000,
+    };
+
+    try {
+      await this._transport.send(batch);
+    } catch (error) {
+      console.error('[Noveum] Failed to send batch:', error);
+      // Don't re-throw to allow graceful error handling
     }
   }
 
@@ -362,7 +506,7 @@ export class NoveumClient {
    */
   private _createNoOpSpan(name: string, traceId: string): Span {
     return new Span(this._generateId(), name, {
-      traceId,
+      trace_id: traceId,
       client: this,
       enabled: false,
     });

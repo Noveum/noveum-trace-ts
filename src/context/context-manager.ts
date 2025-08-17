@@ -1,43 +1,165 @@
 /**
  * Context management for the Noveum Trace SDK
  * Handles tracking of active spans and traces across async operations
+ * Matches Python SDK's context management functionality
  */
 
 import { AsyncLocalStorage } from 'async_hooks';
 import type { IContextManager, ITrace, ISpan } from '../core/interfaces.js';
+import type { Attributes } from '../core/types.js';
 
 /**
- * Context data structure
+ * Browser polyfill for AsyncLocalStorage
  */
-interface TraceContext {
-  activeTrace: ITrace | undefined;
-  activeSpan: ISpan | undefined;
-  spanStack: ISpan[];
+class BrowserAsyncLocalStorage<T> {
+  private _store: T | undefined;
+
+  run<R>(store: T, callback: () => R): R {
+    // Warn if async callback is used; this polyfill does not propagate context across async boundaries
+    const isAsyncFn =
+      typeof callback === 'function' &&
+      ((callback as any)?.constructor?.name === 'AsyncFunction' ||
+        String(callback).trim().startsWith('async'));
+    if (isAsyncFn) {
+      console.warn('BrowserAsyncLocalStorage polyfill does not support async operations correctly');
+    }
+    const previousStore = this._store;
+    this._store = store;
+    try {
+      return callback();
+    } finally {
+      this._store = previousStore;
+    }
+  }
+
+  getStore(): T | undefined {
+    return this._store;
+  }
 }
 
 /**
- * Context manager implementation using AsyncLocalStorage
+ * Get AsyncLocalStorage implementation based on environment
+ */
+function getAsyncLocalStorage<T>(): AsyncLocalStorage<T> | BrowserAsyncLocalStorage<T> {
+  if (typeof AsyncLocalStorage !== 'undefined') {
+    return new AsyncLocalStorage<T>();
+  }
+  return new BrowserAsyncLocalStorage<T>();
+}
+
+/**
+ * Enhanced TraceContext class to hold trace, span, and attributes
+ */
+export class TraceContext {
+  public activeTrace: ITrace | undefined;
+  public activeSpan: ISpan | undefined;
+  public spanStack: ISpan[];
+  public attributes: Attributes;
+
+  constructor(
+    activeTrace?: ITrace,
+    activeSpan?: ISpan,
+    spanStack?: ISpan[],
+    attributes?: Attributes
+  ) {
+    this.activeTrace = activeTrace;
+    this.activeSpan = activeSpan;
+    this.spanStack = spanStack || [];
+    this.attributes = attributes || {};
+  }
+
+  /**
+   * Create a copy of this context with optional overrides
+   */
+  copy(overrides?: Partial<TraceContext>): TraceContext {
+    return new TraceContext(
+      overrides?.activeTrace ?? this.activeTrace,
+      overrides?.activeSpan ?? this.activeSpan,
+      overrides?.spanStack ? [...overrides.spanStack] : [...this.spanStack],
+      overrides?.attributes
+        ? { ...this.attributes, ...overrides.attributes }
+        : { ...this.attributes }
+    );
+  }
+
+  /**
+   * Set multiple attributes on the context
+   */
+  setAttributes(attributes: Attributes): void {
+    Object.assign(this.attributes, attributes);
+  }
+
+  /**
+   * Set a single attribute on the context
+   */
+  setAttribute(key: string, value: Attributes[string]): void {
+    this.attributes[key] = value;
+  }
+
+  /**
+   * Get an attribute from the context
+   */
+  getAttribute(key: string): Attributes[string] | undefined {
+    return this.attributes[key];
+  }
+
+  /**
+   * Clear all context
+   */
+  clear(): void {
+    this.activeTrace = undefined;
+    this.activeSpan = undefined;
+    this.spanStack = [];
+    this.attributes = {};
+  }
+}
+
+/**
+ * Context token for attach/detach operations (Python SDK style)
+ */
+export interface ContextToken {
+  readonly id: string;
+  readonly previousContext: TraceContext;
+}
+
+/**
+ * Context manager implementation using AsyncLocalStorage with Python SDK compatibility
  */
 export class ContextManager implements IContextManager {
-  private readonly _asyncLocalStorage: AsyncLocalStorage<TraceContext>;
-  private _fallbackContext: TraceContext = {
-    activeTrace: undefined,
-    activeSpan: undefined,
-    spanStack: [],
-  };
+  private readonly _asyncLocalStorage:
+    | AsyncLocalStorage<TraceContext>
+    | BrowserAsyncLocalStorage<TraceContext>;
+  private _fallbackContext: TraceContext = new TraceContext();
+  private _tokenCounter = 0;
 
   constructor() {
-    this._asyncLocalStorage = new AsyncLocalStorage<TraceContext>();
+    this._asyncLocalStorage = getAsyncLocalStorage<TraceContext>();
+  }
+
+  /**
+   * Get the current context (matches Python SDK's get_current_context)
+   */
+  getCurrentContext(): TraceContext {
+    const store = this._asyncLocalStorage.getStore();
+    if (store) {
+      return store;
+    }
+    return this._fallbackContext;
   }
 
   getActiveSpan(): ISpan | undefined {
-    const context = this._getContext();
+    const context = this.getCurrentContext();
     return context.activeSpan;
   }
 
   setActiveSpan(span: ISpan): void {
-    const context = this._getContext();
+    const context = this.getCurrentContext();
     context.activeSpan = span;
+
+    // Add to span stack if not already there
+    if (!context.spanStack.includes(span)) {
+      context.spanStack.push(span);
+    }
 
     // Also set the trace if not already set
     if (!context.activeTrace && span.traceId) {
@@ -47,108 +169,122 @@ export class ContextManager implements IContextManager {
   }
 
   withSpan<T>(span: ISpan, fn: () => T): T {
-    const context = this._getContext();
-    const newContext: TraceContext = {
-      ...context,
+    const context = this.getCurrentContext();
+    const newContext = context.copy({
       activeSpan: span,
       spanStack: [...context.spanStack, span],
-    };
+    });
 
-    if (this._asyncLocalStorage.getStore()) {
-      return this._asyncLocalStorage.run(newContext, fn);
-    } else {
-      // Fallback for environments without AsyncLocalStorage
-      const previousContext = this._fallbackContext;
-      this._fallbackContext = newContext;
-      try {
-        return fn();
-      } finally {
-        this._fallbackContext = previousContext;
-      }
-    }
+    return this.runWithContext(newContext, fn);
   }
 
   async withSpanAsync<T>(span: ISpan, fn: () => Promise<T>): Promise<T> {
-    const context = this._getContext();
-    const newContext: TraceContext = {
-      ...context,
+    const context = this.getCurrentContext();
+    const newContext = context.copy({
       activeSpan: span,
       spanStack: [...context.spanStack, span],
-    };
+    });
 
-    if (this._asyncLocalStorage.getStore()) {
-      return this._asyncLocalStorage.run(newContext, fn);
-    } else {
-      // Fallback for environments without AsyncLocalStorage
-      const previousContext = this._fallbackContext;
-      this._fallbackContext = newContext;
-      try {
-        return await fn();
-      } finally {
-        this._fallbackContext = previousContext;
-      }
-    }
+    return this.runWithContextAsync(newContext, fn);
   }
 
   getActiveTrace(): ITrace | undefined {
-    const context = this._getContext();
+    const context = this.getCurrentContext();
     return context.activeTrace;
   }
 
   setActiveTrace(trace: ITrace): void {
-    const context = this._getContext();
+    const context = this.getCurrentContext();
     context.activeTrace = trace;
   }
 
   withTrace<T>(trace: ITrace, fn: () => T): T {
-    const context = this._getContext();
-    const newContext: TraceContext = {
-      ...context,
+    const context = this.getCurrentContext();
+    const newContext = context.copy({
       activeTrace: trace,
       spanStack: [], // Reset span stack for new trace
-    };
+    });
 
-    if (this._asyncLocalStorage.getStore()) {
-      return this._asyncLocalStorage.run(newContext, fn);
-    } else {
-      // Fallback for environments without AsyncLocalStorage
-      const previousContext = this._fallbackContext;
-      this._fallbackContext = newContext;
-      try {
-        return fn();
-      } finally {
-        this._fallbackContext = previousContext;
-      }
-    }
+    return this.runWithContext(newContext, fn);
   }
 
   async withTraceAsync<T>(trace: ITrace, fn: () => Promise<T>): Promise<T> {
-    const context = this._getContext();
-    const newContext: TraceContext = {
-      ...context,
+    const context = this.getCurrentContext();
+    const newContext = context.copy({
       activeTrace: trace,
       spanStack: [], // Reset span stack for new trace
+    });
+
+    return this.runWithContextAsync(newContext, fn);
+  }
+
+  /**
+   * Attach trace to context and return token for later detach (Python SDK style)
+   */
+  attachTrace(trace: ITrace): ContextToken {
+    const currentContext = this.getCurrentContext();
+    const token: ContextToken = {
+      id: `token_${++this._tokenCounter}`,
+      previousContext: currentContext.copy(),
     };
 
-    if (this._asyncLocalStorage.getStore()) {
-      return this._asyncLocalStorage.run(newContext, fn);
-    } else {
-      // Fallback for environments without AsyncLocalStorage
-      const previousContext = this._fallbackContext;
-      this._fallbackContext = newContext;
-      try {
-        return await fn();
-      } finally {
-        this._fallbackContext = previousContext;
-      }
-    }
+    // Update the context directly
+    currentContext.activeTrace = trace;
+    currentContext.spanStack = [];
+
+    return token;
+  }
+
+  /**
+   * Detach trace using token (Python SDK style)
+   */
+  detachTrace(token: ContextToken): void {
+    const currentContext = this.getCurrentContext();
+    const restored = token.previousContext;
+
+    // Restore the previous context state
+    currentContext.activeTrace = restored.activeTrace;
+    currentContext.activeSpan = restored.activeSpan;
+    currentContext.spanStack = [...restored.spanStack];
+    currentContext.attributes = { ...restored.attributes };
+  }
+
+  /**
+   * Attach span to context and return token for later detach (Python SDK style)
+   */
+  attachSpan(span: ISpan): ContextToken {
+    const currentContext = this.getCurrentContext();
+    const token: ContextToken = {
+      id: `token_${++this._tokenCounter}`,
+      previousContext: currentContext.copy(),
+    };
+
+    // Update the context directly
+    currentContext.activeSpan = span;
+    currentContext.spanStack = [...currentContext.spanStack, span];
+
+    return token;
+  }
+
+  /**
+   * Detach span using token (Python SDK style)
+   */
+  detachSpan(token: ContextToken): void {
+    const currentContext = this.getCurrentContext();
+    const restored = token.previousContext;
+
+    // Restore the previous context state
+    currentContext.activeTrace = restored.activeTrace;
+    currentContext.activeSpan = restored.activeSpan;
+    currentContext.spanStack = [...restored.spanStack];
+    currentContext.attributes = { ...restored.attributes };
   }
 
   /**
    * Get the parent span (previous span in the stack)
    */
   getParentSpan(): ISpan | undefined {
-    const context = this._getContext();
+    const context = this.getCurrentContext();
     const stack = context.spanStack;
     return stack.length > 1 ? stack[stack.length - 2] : undefined;
   }
@@ -157,7 +293,7 @@ export class ContextManager implements IContextManager {
    * Get the span stack
    */
   getSpanStack(): readonly ISpan[] {
-    const context = this._getContext();
+    const context = this.getCurrentContext();
     return [...context.spanStack];
   }
 
@@ -165,7 +301,7 @@ export class ContextManager implements IContextManager {
    * Pop the current span from the stack
    */
   popSpan(): ISpan | undefined {
-    const context = this._getContext();
+    const context = this.getCurrentContext();
     const poppedSpan = context.spanStack.pop();
 
     // Update active span to the new top of stack
@@ -178,23 +314,30 @@ export class ContextManager implements IContextManager {
    * Clear all context
    */
   clear(): void {
-    const context = this._getContext();
-    context.activeTrace = undefined;
-    context.activeSpan = undefined;
-    context.spanStack = [];
+    const context = this.getCurrentContext();
+    context.clear();
   }
 
   /**
-   * Get current context or create a new one
+   * Run a function with a specific context
    */
-  private _getContext(): TraceContext {
-    const store = this._asyncLocalStorage.getStore();
-    if (store) {
-      return store;
-    }
+  runWithContext<T>(context: TraceContext, fn: () => T): T {
+    let result!: T;
+    (this._asyncLocalStorage as any).run(context, () => {
+      result = fn();
+    });
+    return result;
+  }
 
-    // Return fallback context for environments without AsyncLocalStorage
-    return this._fallbackContext;
+  /**
+   * Run an async function with a specific context
+   */
+  async runWithContextAsync<T>(context: TraceContext, fn: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      (this._asyncLocalStorage as any).run(context, () => {
+        Promise.resolve(fn()).then(resolve).catch(reject);
+      });
+    });
   }
 
   /**
@@ -216,15 +359,173 @@ export class ContextManager implements IContextManager {
     hasActiveSpan: boolean;
     spanStackDepth: number;
     isUsingAsyncLocalStorage: boolean;
+    contextAttributes: Attributes;
   } {
-    const context = this._getContext();
+    const context = this.getCurrentContext();
 
     return {
       hasActiveTrace: !!context.activeTrace,
       hasActiveSpan: !!context.activeSpan,
       spanStackDepth: context.spanStack.length,
       isUsingAsyncLocalStorage: !!this._asyncLocalStorage.getStore(),
+      contextAttributes: { ...context.attributes },
     };
+  }
+}
+
+/**
+ * Contextual wrapper for spans that auto-manage context
+ */
+export class ContextualSpan implements ISpan {
+  private readonly _span: ISpan;
+  private readonly _contextManager: ContextManager;
+  private _token: ContextToken | undefined;
+
+  constructor(span: ISpan, contextManager: ContextManager) {
+    this._span = span;
+    this._contextManager = contextManager;
+    // Automatically attach this span to context
+    this._token = this._contextManager.attachSpan(span);
+  }
+
+  // Delegate all ISpan methods to the wrapped span
+  get spanId(): string {
+    return this._span.spanId;
+  }
+  get traceId(): string {
+    return this._span.traceId;
+  }
+  get parentSpanId(): string | undefined {
+    return this._span.parentSpanId;
+  }
+  get name(): string {
+    return this._span.name;
+  }
+  get startTime(): Date {
+    return this._span.startTime;
+  }
+  get endTime(): Date | undefined {
+    return this._span.endTime;
+  }
+  get isFinished(): boolean {
+    return this._span.isFinished;
+  }
+  get status(): any {
+    return this._span.status;
+  }
+
+  setAttributes(attributes: Attributes): void {
+    this._span.setAttributes(attributes);
+  }
+
+  setAttribute(key: string, value: Attributes[string]): void {
+    this._span.setAttribute(key, value);
+  }
+
+  addEvent(name: string, attributes?: Attributes): void {
+    this._span.addEvent(name, attributes);
+  }
+
+  setStatus(status: any, message?: string): void {
+    this._span.setStatus(status, message);
+  }
+
+  recordException(exception: Error | string): void {
+    this._span.recordException(exception);
+  }
+
+  async finish(endTime?: Date): Promise<void> {
+    try {
+      await this._span.finish(endTime);
+    } finally {
+      // Automatically detach from context when finished
+      if (this._token) {
+        this._contextManager.detachSpan(this._token);
+        this._token = undefined;
+      }
+    }
+  }
+
+  serialize(): any {
+    return this._span.serialize();
+  }
+}
+
+/**
+ * Contextual wrapper for traces that auto-manage context
+ */
+export class ContextualTrace implements ITrace {
+  private readonly _trace: ITrace;
+  private readonly _contextManager: ContextManager;
+  private _token: ContextToken | undefined;
+
+  constructor(trace: ITrace, contextManager: ContextManager) {
+    this._trace = trace;
+    this._contextManager = contextManager;
+    // Automatically attach this trace to context
+    this._token = this._contextManager.attachTrace(trace);
+  }
+
+  // Delegate all ITrace methods to the wrapped trace
+  get traceId(): string {
+    return this._trace.traceId;
+  }
+  get name(): string {
+    return this._trace.name;
+  }
+  get startTime(): Date {
+    return this._trace.startTime;
+  }
+  get endTime(): Date | undefined {
+    return this._trace.endTime;
+  }
+  get isFinished(): boolean {
+    return this._trace.isFinished;
+  }
+  get spans(): ISpan[] {
+    return this._trace.spans;
+  }
+
+  async startSpan(name: string, options?: any): Promise<ISpan> {
+    const span = await this._trace.startSpan(name, options);
+    // Return a contextual span that auto-manages context
+    return new ContextualSpan(span, this._contextManager);
+  }
+
+  setAttributes(attributes: Attributes): void {
+    this._trace.setAttributes(attributes);
+  }
+
+  setAttribute(key: string, value: Attributes[string]): void {
+    this._trace.setAttribute(key, value);
+  }
+
+  addEvent(name: string, attributes?: Attributes): void {
+    this._trace.addEvent(name, attributes);
+  }
+
+  setStatus(status: any): void {
+    this._trace.setStatus(status);
+  }
+
+  getStatus(): any {
+    return this._trace.getStatus();
+  }
+
+  async finish(endTime?: Date): Promise<void> {
+    try {
+      await this._trace.finish(endTime);
+    } finally {
+      // Automatically detach from context when finished
+      if (this._token) {
+        this._contextManager.detachTrace(this._token);
+        this._token = undefined;
+      }
+    }
+  }
+
+  serialize(): any {
+    return this._trace.serialize();
   }
 }
 
@@ -251,6 +552,35 @@ export function setGlobalContextManager(contextManager: ContextManager): void {
 }
 
 /**
+ * Context manager function using generators (Python SDK style)
+ */
+export function* traceContext(
+  trace?: ITrace,
+  span?: ISpan,
+  attributes?: Attributes
+): Generator<TraceContext, void, unknown> {
+  const cm = getGlobalContextManager();
+  const base = cm.getCurrentContext();
+  const newCtx = base.copy({
+    activeTrace: trace ?? base.activeTrace,
+    activeSpan: span ?? base.activeSpan,
+    attributes: attributes ? { ...base.attributes, ...attributes } : base.attributes,
+  });
+
+  // Attach trace/span tokens for proper ALS propagation
+  const traceToken = trace ? cm.attachTrace(trace) : undefined;
+  const spanToken = span ? cm.attachSpan(span) : undefined;
+  if (attributes) cm.getCurrentContext().setAttributes(attributes);
+
+  try {
+    yield newCtx;
+  } finally {
+    spanToken && cm.detachSpan(spanToken);
+    traceToken && cm.detachTrace(traceToken);
+  }
+}
+
+/**
  * Utility functions for working with context
  */
 
@@ -259,13 +589,16 @@ export function setGlobalContextManager(contextManager: ContextManager): void {
  */
 export async function withCleanContext<T>(fn: () => Promise<T>): Promise<T> {
   const contextManager = getGlobalContextManager();
-  const emptyContext: TraceContext = {
-    activeTrace: undefined,
-    activeSpan: undefined,
-    spanStack: [],
-  };
+  const emptyContext = new TraceContext();
 
-  return contextManager['_asyncLocalStorage'].run(emptyContext, fn);
+  return contextManager.runWithContextAsync(emptyContext, fn);
+}
+
+/**
+ * Get the current context from global context manager
+ */
+export function getCurrentContext(): TraceContext {
+  return getGlobalContextManager().getCurrentContext();
 }
 
 /**
@@ -294,4 +627,34 @@ export function setCurrentSpan(span: ISpan): void {
  */
 export function setCurrentTrace(trace: ITrace): void {
   getGlobalContextManager().setActiveTrace(trace);
+}
+
+/**
+ * Run a function with a specific context
+ */
+export function withContext<T>(context: TraceContext, fn: () => T): T {
+  const contextManager = getGlobalContextManager();
+  return contextManager.runWithContext(context, fn);
+}
+
+/**
+ * Run an async function with a specific context
+ */
+export async function withContextAsync<T>(context: TraceContext, fn: () => Promise<T>): Promise<T> {
+  const contextManager = getGlobalContextManager();
+  return contextManager.runWithContextAsync(context, fn);
+}
+
+/**
+ * Create a contextual span that auto-manages context
+ */
+export function createContextualSpan(span: ISpan): ContextualSpan {
+  return new ContextualSpan(span, getGlobalContextManager());
+}
+
+/**
+ * Create a contextual trace that auto-manages context
+ */
+export function createContextualTrace(trace: ITrace): ContextualTrace {
+  return new ContextualTrace(trace, getGlobalContextManager());
 }

@@ -87,15 +87,21 @@ export type { HttpTransportConfig } from './transport/http-transport.js';
 
 // Decorator exports
 export {
-  setGlobalClient,
   trace,
-  span,
-  autoSpan,
-  timed,
-  retry,
-  traceClass,
-  traced,
-  withSpan,
+  traceLLM,
+  traceAgent,
+  traceRetrieval,
+  traceTool,
+  createTraceDecorator,
+  createLLMDecorator,
+  createAgentDecorator,
+  createRetrievalDecorator,
+  createToolDecorator,
+  decoratorUtils,
+  type TraceLLMOptions,
+  type TraceAgentOptions,
+  type TraceRetrievalOptions,
+  type TraceToolOptions,
 } from './decorators/index.js';
 
 // Utility exports
@@ -104,6 +110,7 @@ export {
   generateSpanId,
   getCurrentTimestamp,
   formatPythonCompatibleTimestamp,
+  validateTimestampFormatting,
   isValidAttributeValue,
   sanitizeAttributes,
   deepMerge,
@@ -122,6 +129,50 @@ export {
   normalizeUrl,
   extractErrorInfo,
 } from './utils/index.js';
+
+// Instrumentation exports
+export {
+  // Types and interfaces
+  type InstrumentationTarget,
+  type InstrumentationConfig,
+  type InstrumentationRegistryConfig,
+  type InstrumentedLibrary,
+  type InstrumentationEvents,
+  type InstrumentationContext,
+  type MethodHooks,
+  DEFAULT_INSTRUMENTATION_CONFIG,
+  DEFAULT_REGISTRY_CONFIG,
+  UnsupportedLibraryError,
+  InstrumentationConflictError,
+
+  // Core classes
+  BaseInstrumentation,
+  InstrumentationRegistry,
+  getGlobalInstrumentationRegistry,
+  setGlobalInstrumentationRegistry,
+  createInstrumentationRegistry,
+
+  // Specific instrumentation implementations
+  OpenAIInstrumentation,
+  AnthropicInstrumentation,
+
+  // Convenience setup functions
+  autoTraceOpenAI,
+  autoTraceAnthropic,
+  autoTraceAll,
+  stopTracingOpenAI,
+  stopTracingAnthropic,
+  stopTracingAll,
+
+  // Registry management functions
+  isTraced,
+  getTracingInfo,
+  getRegistryStats,
+  configureInstrumentation,
+  enableInstrumentation,
+  disableInstrumentation,
+  isInstrumentationEnabled,
+} from './instrumentation/index.js';
 
 /**
  * Create and configure a new Noveum client
@@ -259,7 +310,6 @@ export async function shutdown(): Promise<void> {
     defaultClient = undefined;
   }
 }
-
 /**
  * SDK version
  */

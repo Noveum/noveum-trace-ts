@@ -166,4 +166,40 @@ temp/
 ehthumbs.db
 Thumbs.db 
 
+dev-debug.log
+# Environment variables
+.vscode
+# OS specific
+
+# Task files
+# tasks.json
+# tasks/ 
+
+# Python files and packages (not relevant for TypeScript SDK)
+*.whl
+*.dist-info/
+noveum_trace/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter notebooks (examples only)
+*.ipynb
+
+# Temporary coverage files
+coverage_*.txt
+final_coverage.txt
+
+# Example and temporary files
+example_*.json
+*_example.*
+
+# IDE configurations
+.cursor/
+.claude/
+
+# Temporary trace files
+*.trace.json
+
+.taskmaster/
 tasks/

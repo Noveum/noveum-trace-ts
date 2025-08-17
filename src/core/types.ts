@@ -3,23 +3,25 @@
  */
 
 /**
- * Span status enumeration
+ * Span status enumeration (Python SDK compatible)
  */
 export enum SpanStatus {
-  UNSET = 'UNSET',
-  OK = 'OK',
-  ERROR = 'ERROR',
+  UNSET = 'unset',
+  OK = 'ok',
+  ERROR = 'error',
+  TIMEOUT = 'timeout',
+  CANCELLED = 'cancelled',
 }
 
 /**
- * Span kind enumeration
+ * Span kind enumeration (Python SDK compatible)
  */
 export enum SpanKind {
-  INTERNAL = 'INTERNAL',
-  SERVER = 'SERVER',
-  CLIENT = 'CLIENT',
-  PRODUCER = 'PRODUCER',
-  CONSUMER = 'CONSUMER',
+  INTERNAL = 'internal',
+  SERVER = 'server',
+  CLIENT = 'client',
+  PRODUCER = 'producer',
+  CONSUMER = 'consumer',
 }
 
 /**
@@ -43,7 +45,7 @@ export type AttributeValue = string | number | boolean | string[] | number[] | b
 export type Attributes = Record<string, AttributeValue>;
 
 /**
- * Event structure
+ * Event structure (Python SDK compatible)
  */
 export interface TraceEvent {
   name: string;
@@ -52,42 +54,42 @@ export interface TraceEvent {
 }
 
 /**
- * Span context information
+ * Span context information (Python SDK compatible)
  */
 export interface SpanContext {
-  traceId: string;
-  spanId: string;
-  parentSpanId?: string;
-  traceFlags: number;
-  traceState?: string;
+  trace_id: string;
+  span_id: string;
+  parent_span_id?: string;
+  trace_flags: number;
+  trace_state?: string;
 }
 
 /**
- * Trace options for creation
+ * Trace options for creation (Python SDK compatible)
  */
 export interface TraceOptions {
-  traceId?: string;
+  trace_id?: string;
   attributes?: Attributes;
-  startTime?: Date;
-  parentTraceId?: string;
+  start_time?: Date;
+  parent_trace_id?: string;
   level?: TraceLevel;
 }
 
 /**
- * Span options for creation
+ * Span options for creation (Python SDK compatible)
  */
 export interface SpanOptions {
-  traceId?: string;
+  trace_id?: string;
   kind?: SpanKind;
   attributes?: Attributes;
-  parentSpanId?: string;
-  startTime?: Date;
+  parent_span_id?: string;
+  start_time?: Date;
   links?: SpanLink[];
   enabled?: boolean;
 }
 
 /**
- * Span link structure
+ * Span link structure (Python SDK compatible)
  */
 export interface SpanLink {
   context: SpanContext;
@@ -288,52 +290,179 @@ export interface FastifyIntegrationOptions {
 export interface SerializedEvent {
   name: string;
   timestamp: string;
-  attributes: Attributes | undefined;
+  attributes?: Attributes;
 }
 
 /**
- * Serialized span data for transport
+ * API-compatible trace format (snake_case)
+ *
+ * This interface represents the external API format for traces that will be sent
+ * over HTTP to the Noveum backend. Key differences from SerializedTrace:
+ * - Uses optional fields (?) instead of nullable fields (| null) for better JSON compatibility
+ * - Uses string for status field instead of SpanStatus enum for API flexibility
+ * - Uses Record<string, any> for metadata.tags instead of Record<string, string>
+ */
+export interface ApiTrace {
+  trace_id: string;
+  name: string;
+  start_time: string;
+  end_time?: string;
+  duration_ms?: number;
+  status: string;
+  status_message?: string;
+  span_count: number;
+  error_count: number;
+  attributes: Record<string, any>;
+  metadata: {
+    user_id?: string;
+    session_id?: string;
+    request_id?: string;
+    tags: Record<string, any>;
+    custom_attributes: Record<string, any>;
+  };
+  spans: ApiSpan[];
+  sdk: {
+    name: string;
+    version: string;
+  };
+  project: string;
+  environment: string;
+}
+
+/**
+ * API-compatible span format (snake_case)
+ *
+ * This interface represents the external API format for spans. Key differences from SerializedSpan:
+ * - Uses optional fields (?) instead of nullable fields (| null) for better JSON compatibility
+ * - Uses string for status field instead of SpanStatus enum for API flexibility
+ */
+export interface ApiSpan {
+  span_id: string;
+  trace_id: string;
+  parent_span_id?: string;
+  name: string;
+  start_time: string;
+  end_time?: string;
+  duration_ms?: number;
+  status: string;
+  status_message?: string;
+  attributes: Record<string, any>;
+  events: ApiEvent[];
+  links: ApiLink[];
+}
+
+/**
+ * API-compatible event format (snake_case)
+ *
+ * This interface represents the external API format for events.
+ * Uses Record<string, any> for attributes instead of optional Attributes type.
+ */
+export interface ApiEvent {
+  name: string;
+  timestamp: string;
+  attributes: Record<string, any>;
+}
+
+/**
+ * API-compatible link format (snake_case)
+ *
+ * This interface represents the external API format for links.
+ * Same structure as SerializedLink but with Record<string, any> for attributes.
+ */
+export interface ApiLink {
+  trace_id: string;
+  span_id: string;
+  attributes?: Record<string, any>;
+}
+
+/**
+ * API batch format
+ */
+export interface ApiBatch {
+  traces: ApiTrace[];
+  timestamp: number;
+}
+
+/**
+ * Serialized link for transport (Python SDK compatible format)
+ *
+ * This interface represents the internal serialization format for span links,
+ * designed for compatibility with the Python SDK. Uses nullable fields and
+ * strict typing for internal consistency.
+ */
+export interface SerializedLink {
+  trace_id: string;
+  span_id: string;
+  attributes?: Attributes;
+}
+
+/**
+ * Serialized span data for transport (Python SDK compatible format)
+ *
+ * This interface represents the internal serialization format for spans,
+ * designed for compatibility with the Python SDK. Key characteristics:
+ * - Uses nullable fields (| null) for precise null handling
+ * - Uses string literal types for status for Python SDK compatibility
+ * - Uses strict Attributes type for internal consistency
  */
 export interface SerializedSpan {
-  traceId: string;
-  spanId: string;
-  parentSpanId: string | undefined;
+  span_id: string;
+  trace_id: string;
+  parent_span_id: string | null;
   name: string;
-  kind: SpanKind;
-  startTime: string;
-  endTime: string | undefined;
-  status: SpanStatus;
-  statusMessage: string | undefined;
+  start_time: string;
+  end_time: string | null;
+  duration_ms: number;
+  status: 'ok' | 'error' | 'unset' | 'timeout' | 'cancelled';
+  status_message: string | null;
   attributes: Attributes;
   events: SerializedEvent[];
-  links: SpanLink[];
+  links: SerializedLink[];
 }
 
 /**
- * Serialized trace data for transport
+ * Serialized trace data for transport (Python SDK compatible format)
+ *
+ * This interface represents the internal serialization format for traces,
+ * designed for compatibility with the Python SDK. Key characteristics:
+ * - Uses nullable fields (| null) for precise null handling
+ * - Uses string literal types for status for Python SDK compatibility
+ * - Uses Record<string, string> for tags (stricter than API format)
+ * - Used internally before conversion to ApiTrace for HTTP transport
  */
 export interface SerializedTrace {
-  traceId: string;
+  trace_id: string;
   name: string;
-  startTime: string;
-  endTime: string | undefined;
-  status: SpanStatus;
+  start_time: string;
+  end_time: string | null;
+  duration_ms: number;
+  status: 'ok' | 'error' | 'unset' | 'timeout' | 'cancelled';
+  status_message: string | null;
+  span_count: number;
+  error_count: number;
   attributes: Attributes;
-  events: TraceEvent[];
+  metadata: {
+    user_id: string | null;
+    session_id: string | null;
+    request_id: string | null;
+    tags: Record<string, string>;
+    custom_attributes: Record<string, any>;
+  };
   spans: SerializedSpan[];
+  sdk: {
+    name: string;
+    version: string;
+  };
+  project: string;
+  environment: string;
 }
 
 /**
  * Batch of traces for transport
  */
 export interface TraceBatch {
-  traces: SerializedSpan[] | SerializedTrace[];
-  metadata: {
-    project: string;
-    environment: string;
-    timestamp: string;
-    sdkVersion: string;
-  };
+  traces: SerializedTrace[];
+  timestamp: number; // Unix timestamp in seconds (Python format)
 }
 
 /**

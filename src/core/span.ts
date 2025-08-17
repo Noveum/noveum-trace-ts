@@ -5,7 +5,12 @@
 import type { ISpan, ITrace } from './interfaces.js';
 import type { Attributes, SpanOptions, TraceEvent, SerializedSpan, SpanLink } from './types.js';
 import { SpanKind, SpanStatus } from './types.js';
-import { generateSpanId, sanitizeAttributes, extractErrorInfo } from '../utils/index.js';
+import {
+  generateSpanId,
+  sanitizeAttributes,
+  extractErrorInfo,
+  formatPythonCompatibleTimestamp,
+} from '../utils/index.js';
 
 /**
  * Implementation of a span - represents a single operation within a trace
@@ -31,10 +36,11 @@ export class Span implements ISpan {
     this._trace = trace;
     this._spanId = generateSpanId();
     this._traceId = trace.traceId;
-    this._parentSpanId = options.parentSpanId;
+    // Normalize parent to undefined when null/empty
+    this._parentSpanId = (options.parent_span_id ?? undefined) || undefined;
     this._name = name;
     this._kind = options.kind ?? SpanKind.INTERNAL;
-    this._startTime = options.startTime ?? new Date();
+    this._startTime = options.start_time ?? new Date();
     this._links = options.links ?? [];
 
     if (options.attributes) {
@@ -173,16 +179,18 @@ export class Span implements ISpan {
     }
 
     this._endTime = endTime ?? new Date();
-    this._isFinished = true;
 
     // If status is still UNSET, set it to OK
     if (this._status === SpanStatus.UNSET) {
       this._status = SpanStatus.OK;
     }
 
-    // Calculate duration and add as attribute
+    // Calculate duration and add as attribute before marking as finished
     const duration = this._endTime.getTime() - this._startTime.getTime();
     this.setAttribute('duration_ms', duration);
+
+    // Now mark as finished
+    this._isFinished = true;
 
     // Notify the trace that this span has finished
     // This allows the trace to potentially flush or perform cleanup
@@ -194,22 +202,46 @@ export class Span implements ISpan {
   }
 
   serialize(): SerializedSpan {
+    const duration = this._endTime ? this._endTime.getTime() - this._startTime.getTime() : 0;
+
+    // Convert status enum to Python-compatible string
+    const status = ((): 'ok' | 'error' | 'unset' | 'timeout' | 'cancelled' => {
+      switch (this._status) {
+        case SpanStatus.OK:
+          return 'ok';
+        case SpanStatus.ERROR:
+          return 'error';
+        case SpanStatus.TIMEOUT:
+          return 'timeout';
+        case SpanStatus.CANCELLED:
+          return 'cancelled';
+        case SpanStatus.UNSET:
+        default:
+          return 'unset';
+      }
+    })();
+
     return {
-      traceId: this._traceId,
-      spanId: this._spanId,
-      parentSpanId: this._parentSpanId,
+      trace_id: this._traceId,
+      span_id: this._spanId,
+      parent_span_id: this._parentSpanId || null,
       name: this._name,
-      kind: this._kind,
-      startTime: this._startTime.toISOString(),
-      endTime: this._endTime?.toISOString(),
-      status: this._status,
-      statusMessage: this._statusMessage,
+      start_time: formatPythonCompatibleTimestamp(this._startTime),
+      end_time: this._endTime ? formatPythonCompatibleTimestamp(this._endTime) : null,
+      duration_ms: duration,
+      status,
+      status_message: this._statusMessage || null,
       attributes: { ...this._attributes },
       events: this._events.map(event => ({
         ...event,
         timestamp: event.timestamp,
+        attributes: event.attributes || {},
       })),
-      links: [...this._links],
+      links: this._links.map(link => ({
+        trace_id: link.context.trace_id,
+        span_id: link.context.span_id,
+        attributes: link.attributes || {},
+      })),
     };
   }
 
@@ -222,7 +254,7 @@ export class Span implements ISpan {
   ): Promise<ISpan> {
     return this._trace.startSpan(name, {
       ...options,
-      parentSpanId: this._spanId,
+      parent_span_id: this._spanId,
     });
   }
 

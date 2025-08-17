@@ -84,6 +84,12 @@ export interface ISpan {
   setStatus(status: SpanStatus, message?: string): void;
 
   /**
+   * Record an exception on the span
+   * @param exception - Error or string to record
+   */
+  recordException(exception: Error | string): void;
+
+  /**
    * Finish the span
    * @param endTime - Optional end time (defaults to current time)
    */

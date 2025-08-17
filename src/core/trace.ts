@@ -9,25 +9,31 @@ import type {
   TraceEvent,
   TraceOptions,
   SerializedTrace,
+  TraceBatch,
 } from './types.js';
 import { TraceLevel, SpanStatus } from './types.js';
 import {
   generateTraceId,
   sanitizeAttributes,
-  getCurrentTimestamp,
-  getSdkVersion,
+  formatPythonCompatibleTimestamp,
 } from '../utils/index.js';
 import { Span } from './span.js';
 
 /**
  * Implementation of a trace - represents a complete tracing session
  */
+export interface TraceConfig {
+  project?: string;
+  environment?: string;
+}
+
 export class Trace implements ITrace {
   private readonly _traceId: string;
   private readonly _name: string;
   private readonly _level: TraceLevel;
   private readonly _startTime: Date;
   private readonly _transport: ITransport | undefined;
+  private readonly _config: TraceConfig;
 
   private _endTime?: Date;
   private _attributes: Attributes = {};
@@ -37,12 +43,21 @@ export class Trace implements ITrace {
   private _activeSpan?: ISpan;
   private _status: SpanStatus = SpanStatus.OK;
 
-  constructor(name: string, options: TraceOptions = {}, transport?: ITransport) {
+  constructor(
+    name: string,
+    options: TraceOptions = {},
+    transport?: ITransport,
+    config?: TraceConfig
+  ) {
     this._traceId = generateTraceId();
     this._name = name;
     this._level = options.level ?? TraceLevel.INFO;
-    this._startTime = options.startTime ?? new Date();
+    this._startTime = options.start_time ?? new Date();
     this._transport = transport;
+    this._config = {
+      project: config?.project ?? 'default',
+      environment: config?.environment ?? 'development',
+    };
 
     if (options.attributes) {
       this._attributes = sanitizeAttributes(options.attributes);
@@ -109,8 +124,8 @@ export class Trace implements ITrace {
     }
 
     // If no parent span ID is specified and we have an active span, use it as parent
-    if (!options.parentSpanId && this._activeSpan && !this._activeSpan.isFinished) {
-      options.parentSpanId = this._activeSpan.spanId;
+    if (!options.parent_span_id && this._activeSpan && !this._activeSpan.isFinished) {
+      options.parent_span_id = this._activeSpan.spanId;
     }
 
     const span = new Span(this, name, options);
@@ -180,12 +195,13 @@ export class Trace implements ITrace {
       await Promise.all(unfinishedSpans.map(span => span.finish(this._endTime)));
     }
 
-    this._isFinished = true;
-
-    // Calculate total duration and add as attribute
+    // Calculate total duration and add as attribute before marking as finished
     const duration = this._endTime.getTime() - this._startTime.getTime();
     this.setAttribute('duration_ms', duration);
     this.setAttribute('span_count', this._spans.length);
+
+    // Now mark as finished
+    this._isFinished = true;
 
     // Send the trace data if transport is available
     if (this._transport) {
@@ -198,18 +214,50 @@ export class Trace implements ITrace {
   }
 
   serialize(): SerializedTrace {
+    const duration = this._endTime ? this._endTime.getTime() - this._startTime.getTime() : 0;
+
+    // Convert status enum to Python-compatible string
+    const status = ((): 'ok' | 'error' | 'unset' | 'timeout' | 'cancelled' => {
+      switch (this._status) {
+        case SpanStatus.OK:
+          return 'ok';
+        case SpanStatus.ERROR:
+          return 'error';
+        case SpanStatus.TIMEOUT:
+          return 'timeout';
+        case SpanStatus.CANCELLED:
+          return 'cancelled';
+        case SpanStatus.UNSET:
+        default:
+          return 'unset';
+      }
+    })();
+
     return {
-      traceId: this._traceId,
+      trace_id: this._traceId,
       name: this._name,
-      startTime: this._startTime.toISOString(),
-      endTime: this._endTime?.toISOString(),
-      status: this._status,
+      start_time: formatPythonCompatibleTimestamp(this._startTime),
+      end_time: this._endTime ? formatPythonCompatibleTimestamp(this._endTime) : null,
+      duration_ms: duration,
+      status,
+      status_message: null,
+      span_count: this._spans.length,
+      error_count: this._spans.filter(span => span.status === SpanStatus.ERROR).length,
       attributes: { ...this._attributes },
-      events: this._events.map(event => ({
-        ...event,
-        timestamp: event.timestamp,
-      })),
+      metadata: {
+        user_id: null,
+        session_id: null,
+        request_id: null,
+        tags: {},
+        custom_attributes: {},
+      },
       spans: this._spans.map(span => span.serialize()),
+      sdk: {
+        name: '@noveum/trace',
+        version: process.env.npm_package_version || '0.0.0',
+      },
+      project: this._config.project || 'default',
+      environment: this._config.environment || 'development',
     };
   }
 
@@ -315,9 +363,10 @@ export class Trace implements ITrace {
       name,
       {
         ...options,
-        parentTraceId: this._traceId,
+        parent_trace_id: this._traceId,
       },
-      this._transport
+      this._transport,
+      this._config
     );
   }
 
@@ -326,14 +375,9 @@ export class Trace implements ITrace {
       return;
     }
 
-    const batch = {
+    const batch: TraceBatch = {
       traces: [this.serialize()],
-      metadata: {
-        project: 'default', // This should come from client configuration
-        environment: 'development', // This should come from client configuration
-        timestamp: getCurrentTimestamp(),
-        sdkVersion: getSdkVersion(),
-      },
+      timestamp: Math.floor(Date.now() / 1000), // Unix timestamp in seconds
     };
 
     await this._transport.send(batch);

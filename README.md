@@ -225,7 +225,7 @@ span.setStatus('ERROR', 'Rate limit exceeded');
 NOVEUM_API_KEY=your-api-key
 NOVEUM_PROJECT=my-service-name        # Your service/application name
 NOVEUM_ENVIRONMENT=production         # Environment (dev, staging, prod)
-NOVEUM_ENDPOINT=https://api.noveum.ai/api/v1/traces
+NOVEUM_ENDPOINT=https://api.noveum.ai/api
 ```
 
 ### Client Options
