@@ -20,26 +20,37 @@ import { DEFAULT_REGISTRY_CONFIG } from './types.js';
  * Event emitter for instrumentation events
  */
 class InstrumentationEventEmitter {
-  private listeners: Partial<InstrumentationEvents> = {};
+  private listeners: Map<keyof InstrumentationEvents, Array<Function>> = new Map();
 
   on<K extends keyof InstrumentationEvents>(event: K, listener: InstrumentationEvents[K]): void {
-    if (!this.listeners[event]) {
-      this.listeners[event] = listener as any;
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
     }
+    this.listeners.get(event)!.push(listener as any);
   }
 
   emit<K extends keyof InstrumentationEvents>(
     event: K,
     ...args: Parameters<InstrumentationEvents[K]>
   ): void {
-    const listener = this.listeners[event];
-    if (listener) {
-      (listener as any)(...args);
+    const listeners = this.listeners.get(event);
+    if (listeners) {
+      listeners.forEach(listener => (listener as any)(...args));
     }
   }
 
-  off<K extends keyof InstrumentationEvents>(event: K): void {
-    delete this.listeners[event];
+  off<K extends keyof InstrumentationEvents>(event: K, listener?: InstrumentationEvents[K]): void {
+    if (!listener) {
+      this.listeners.delete(event);
+    } else {
+      const listeners = this.listeners.get(event);
+      if (listeners) {
+        const index = listeners.indexOf(listener as any);
+        if (index !== -1) {
+          listeners.splice(index, 1);
+        }
+      }
+    }
   }
 }
 
@@ -317,9 +328,10 @@ export class InstrumentationRegistry {
   /**
    * Unsubscribe from instrumentation events
    * @param event - Event type to stop listening for
+   * @param listener - Optional specific listener to remove
    */
-  off<K extends keyof InstrumentationEvents>(event: K): void {
-    this._events.off(event);
+  off<K extends keyof InstrumentationEvents>(event: K, listener?: InstrumentationEvents[K]): void {
+    this._events.off(event, listener);
   }
 
   /**

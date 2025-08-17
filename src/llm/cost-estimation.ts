@@ -5,7 +5,7 @@
  * up-to-date pricing information and token counting.
  */
 
-import type { CostEstimate, ModelInfo } from './types.js';
+import type { CostEstimate, CostEstimateResult, ModelInfo } from './types.js';
 import { MODEL_REGISTRY } from './model-registry.js';
 import { CostEstimationError, ModelNotFoundError } from './types.js';
 import { estimate_token_count, estimate_token_count_io } from './token-counting.js';
@@ -146,7 +146,7 @@ export async function compare_model_costs(
   inputText: string,
   models: string[],
   outputText: string = ''
-): Promise<Array<CostEstimate & { model_name: string }>> {
+): Promise<CostEstimateResult[]> {
   const results = await Promise.all(
     models.map(async model => {
       try {
@@ -232,22 +232,30 @@ export async function estimate_conversation_cost(
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   const messageCosts: CostEstimate[] = [];
+  let cumulativeContext = '';
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
     if (!message || !message.content) continue;
 
     if (message.role === 'user' || message.role === 'system') {
-      // User/system messages are input tokens
-      const tokenCount = await estimate_token_count(message.content, model);
-      totalInputTokens += tokenCount.total;
+      // Add message to cumulative context
+      cumulativeContext += `${message.content} `;
 
-      const cost = estimate_cost_from_tokens(tokenCount.total, 0, model);
+      // Calculate tokens for the cumulative context (this is what the LLM actually processes)
+      const tokenCount = await estimate_token_count(cumulativeContext, model);
+      const incrementalTokens = i === 0 ? tokenCount.total : tokenCount.total - totalInputTokens;
+      totalInputTokens = tokenCount.total;
+
+      const cost = estimate_cost_from_tokens(incrementalTokens, 0, model);
       messageCosts.push(cost);
     } else {
       // Assistant messages are output tokens
       const tokenCount = await estimate_token_count(message.content, model);
       totalOutputTokens += tokenCount.total;
+
+      // Add assistant message to cumulative context for future messages
+      cumulativeContext += `${message.content} `;
 
       const cost = estimate_cost_from_tokens(0, tokenCount.total, model);
       messageCosts.push(cost);

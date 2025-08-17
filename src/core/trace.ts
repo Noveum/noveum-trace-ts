@@ -18,12 +18,18 @@ import { Span } from './span.js';
 /**
  * Implementation of a trace - represents a complete tracing session
  */
+export interface TraceConfig {
+  project?: string;
+  environment?: string;
+}
+
 export class Trace implements ITrace {
   private readonly _traceId: string;
   private readonly _name: string;
   private readonly _level: TraceLevel;
   private readonly _startTime: Date;
   private readonly _transport: ITransport | undefined;
+  private readonly _config: TraceConfig;
 
   private _endTime?: Date;
   private _attributes: Attributes = {};
@@ -33,12 +39,21 @@ export class Trace implements ITrace {
   private _activeSpan?: ISpan;
   private _status: SpanStatus = SpanStatus.OK;
 
-  constructor(name: string, options: TraceOptions = {}, transport?: ITransport) {
+  constructor(
+    name: string,
+    options: TraceOptions = {},
+    transport?: ITransport,
+    config?: TraceConfig
+  ) {
     this._traceId = generateTraceId();
     this._name = name;
     this._level = options.level ?? TraceLevel.INFO;
     this._startTime = options.start_time ?? new Date();
     this._transport = transport;
+    this._config = {
+      project: config?.project ?? 'default',
+      environment: config?.environment ?? 'development',
+    };
 
     if (options.attributes) {
       this._attributes = sanitizeAttributes(options.attributes);
@@ -207,7 +222,7 @@ export class Trace implements ITrace {
       status: this._status,
       status_message: null,
       span_count: this._spans.length,
-      error_count: this._spans.filter(span => span.status === 'error').length,
+      error_count: this._spans.filter(span => span.status === SpanStatus.ERROR).length,
       attributes: { ...this._attributes },
       metadata: {
         user_id: null,
@@ -218,15 +233,11 @@ export class Trace implements ITrace {
       },
       spans: this._spans.map(span => span.serialize()),
       sdk: {
-        name: 'noveum-trace-ts',
+        name: '@noveum/trace',
         version: process.env.npm_package_version || '0.0.0',
       },
-      project: process.env.NOVEUM_PROJECT || 'noveum-trace-ts',
-      environment:
-        process.env.NOVEUM_ENVIRONMENT ||
-        (process.env.GITHUB_ACTIONS === 'true' || process.env.CI === 'true'
-          ? 'git-action'
-          : 'development'),
+      project: this._config.project || 'default',
+      environment: this._config.environment || 'development',
     };
   }
 
@@ -334,7 +345,8 @@ export class Trace implements ITrace {
         ...options,
         parent_trace_id: this._traceId,
       },
-      this._transport
+      this._transport,
+      this._config
     );
   }
 

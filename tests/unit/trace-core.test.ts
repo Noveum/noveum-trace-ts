@@ -11,7 +11,7 @@ describe('Trace (from trace.ts)', () => {
     mockTransport = {
       send: vi.fn().mockResolvedValue(undefined),
     };
-    trace = new Trace('test-trace');
+    trace = new Trace('test-trace', {}, undefined, { project: 'test-project', environment: 'test' });
   });
 
   describe('constructor', () => {
@@ -32,7 +32,8 @@ describe('Trace (from trace.ts)', () => {
           attributes: { 'test.key': 'test.value' },
           start_time: new Date('2023-01-01T00:00:00Z'),
         },
-        mockTransport
+        mockTransport,
+        { project: 'custom-project', environment: 'custom-env' }
       );
 
       expect(customTrace.level).toBe(TraceLevel.DEBUG);
@@ -205,7 +206,7 @@ describe('Trace (from trace.ts)', () => {
     });
 
     it('should send to transport if available', async () => {
-      const traceWithTransport = new Trace('test-trace', {}, mockTransport);
+      const traceWithTransport = new Trace('test-trace', {}, mockTransport, { project: 'test-project', environment: 'test' });
       await traceWithTransport.finish();
 
       expect(mockTransport.send).toHaveBeenCalledWith(
@@ -225,7 +226,7 @@ describe('Trace (from trace.ts)', () => {
       const errorTransport: ITransport = {
         send: vi.fn().mockRejectedValue(new Error('Transport error')),
       };
-      const traceWithErrorTransport = new Trace('test-trace', {}, errorTransport);
+      const traceWithErrorTransport = new Trace('test-trace', {}, errorTransport, { project: 'test-project', environment: 'test' });
 
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       await traceWithErrorTransport.finish();
@@ -252,7 +253,7 @@ describe('Trace (from trace.ts)', () => {
         name: 'test-trace',
         start_time: trace.startTime.toISOString(),
         end_time: null,
-        status: SpanStatus.OK,
+        status: 'ok',
         attributes: { 'test.key': 'test.value' },
         spans: expect.arrayContaining([
           expect.objectContaining({
@@ -268,6 +269,37 @@ describe('Trace (from trace.ts)', () => {
 
       const serialized = trace.serialize();
       expect(serialized.end_time).toBe(trace.endTime!.toISOString());
+    });
+
+    it('should use config values for project and environment', () => {
+      const customTrace = new Trace(
+        'custom-trace',
+        {},
+        undefined,
+        { project: 'my-project', environment: 'production' }
+      );
+      
+      const serialized = customTrace.serialize();
+      expect(serialized.project).toBe('my-project');
+      expect(serialized.environment).toBe('production');
+    });
+
+    it('should use default values when config is not provided', () => {
+      const defaultTrace = new Trace('default-trace');
+      const serialized = defaultTrace.serialize();
+      
+      expect(serialized.project).toBe('default');
+      expect(serialized.environment).toBe('development');
+    });
+
+    it('should convert status enum to string correctly', () => {
+      trace.setStatus(SpanStatus.ERROR);
+      const serialized = trace.serialize();
+      expect(serialized.status).toBe('error');
+      
+      trace.setStatus(SpanStatus.TIMEOUT);
+      const serializedTimeout = trace.serialize();
+      expect(serializedTimeout.status).toBe('timeout');
     });
   });
 

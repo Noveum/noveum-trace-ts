@@ -106,7 +106,7 @@ const defaultTokenExtractor: TokenExtractor = (result: any): Partial<LLMMetadata
  * Default cost calculator
  */
 const defaultCostCalculator: CostCalculator = (metadata: LLMMetadata): number => {
-  if (!metadata.model || !metadata.inputTokens || !metadata.outputTokens) {
+  if (!metadata.model || metadata.inputTokens == null || metadata.outputTokens == null) {
     return 0;
   }
 

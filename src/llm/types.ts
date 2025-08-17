@@ -120,6 +120,13 @@ export interface CostEstimate {
 }
 
 /**
+ * Cost estimation result that can include errors
+ */
+export type CostEstimateResult =
+  | (CostEstimate & { model_name: string })
+  | (CostEstimate & { model_name: string; error: string });
+
+/**
  * LLM metadata extracted from responses
  */
 export interface LLMMetadata {

@@ -337,7 +337,8 @@ export class OpenAIInstrumentation extends BaseInstrumentation {
 
       // Extract LLM metadata using utility function
       try {
-        const llmMetadata = extract_llm_metadata(result, 'openai');
+        const model = this.extractModelFromContext(context);
+        const llmMetadata = extract_llm_metadata(result, model, 'openai');
         Object.assign(context.attributes, llmMetadata);
       } catch (error) {
         console.warn('Failed to extract LLM metadata:', error);

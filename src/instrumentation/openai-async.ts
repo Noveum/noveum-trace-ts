@@ -57,7 +57,47 @@ export interface AsyncOperationContext {
 export class AsyncOpenAIInstrumentation {
   private readonly streamingContexts = new Map<string, StreamingTraceContext>();
   private readonly asyncOperations = new Map<string, AsyncOperationContext>();
+  private readonly operationTimeouts = new Map<string, NodeJS.Timeout>();
   private readonly contextManager = getGlobalContextManager();
+
+  // Default cleanup timeout: 5 minutes (300,000ms)
+  private readonly defaultCleanupTimeoutMs = 300000;
+
+  // Maximum chunks to keep in memory per streaming operation
+  private readonly MAX_CHUNKS_IN_MEMORY = 1000;
+
+  /**
+   * Schedule cleanup of operation context after timeout to prevent memory leaks
+   */
+  private scheduleCleanup(
+    operationId: string,
+    timeoutMs: number = this.defaultCleanupTimeoutMs
+  ): void {
+    const timeout = setTimeout(() => {
+      this.streamingContexts.delete(operationId);
+      this.asyncOperations.delete(operationId);
+      this.operationTimeouts.delete(operationId);
+
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn(
+          `[OpenAI Instrumentation] Cleaned up stale operation ${operationId} after ${timeoutMs}ms timeout`
+        );
+      }
+    }, timeoutMs);
+
+    this.operationTimeouts.set(operationId, timeout);
+  }
+
+  /**
+   * Clear cleanup timeout when operation completes successfully
+   */
+  private clearCleanupTimeout(operationId: string): void {
+    const timeout = this.operationTimeouts.get(operationId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.operationTimeouts.delete(operationId);
+    }
+  }
 
   /**
    * Instrument async OpenAI method with comprehensive tracing
@@ -83,6 +123,9 @@ export class AsyncOpenAIInstrumentation {
     };
 
     this.asyncOperations.set(operationId, asyncContext);
+
+    // Schedule cleanup timeout to prevent memory leaks
+    this.scheduleCleanup(operationId);
 
     try {
       // Detect SDK version and create span context
@@ -133,15 +176,22 @@ export class AsyncOpenAIInstrumentation {
 
       // Handle streaming vs non-streaming operations
       if (isStreaming) {
-        return await this.handleStreamingOperation(span, activeTrace, originalMethod, args, {
-          operationId,
-          startTime,
-          methodName,
-          sdkVersion,
-          config: context?.config || DEFAULT_VALIDATION_CONFIG,
-        });
+        return await this.handleStreamingOperation(
+          span,
+          activeTrace,
+          originalMethod,
+          instance,
+          args,
+          {
+            operationId,
+            startTime,
+            methodName,
+            sdkVersion,
+            config: context?.config || DEFAULT_VALIDATION_CONFIG,
+          }
+        );
       } else {
-        return await this.handleNonStreamingOperation(span, originalMethod, args, {
+        return await this.handleNonStreamingOperation(span, originalMethod, instance, args, {
           operationId,
           startTime,
           methodName,
@@ -163,6 +213,7 @@ export class AsyncOpenAIInstrumentation {
       throw diagnosticError;
     } finally {
       asyncContext.endTime = Date.now();
+      this.clearCleanupTimeout(operationId);
       this.asyncOperations.delete(operationId);
     }
   }
@@ -174,6 +225,7 @@ export class AsyncOpenAIInstrumentation {
     span: ISpan,
     trace: ITrace,
     originalMethod: Function,
+    instance: any,
     args: any[],
     context: {
       operationId: string;
@@ -201,7 +253,7 @@ export class AsyncOpenAIInstrumentation {
     try {
       // Execute the original streaming method
       const result = await this.contextManager.withSpanAsync(span, async () => {
-        return await originalMethod.apply(this, args);
+        return await originalMethod.apply(instance, args);
       });
 
       // Handle different types of streaming responses
@@ -214,6 +266,7 @@ export class AsyncOpenAIInstrumentation {
         return (await this.instrumentDirectStream(result, streamingContext)) as T;
       }
     } finally {
+      this.clearCleanupTimeout(context.operationId);
       this.streamingContexts.delete(context.operationId);
     }
   }
@@ -224,6 +277,7 @@ export class AsyncOpenAIInstrumentation {
   private async handleNonStreamingOperation<T>(
     span: ISpan,
     originalMethod: Function,
+    instance: any,
     args: any[],
     context: {
       operationId: string;
@@ -236,7 +290,7 @@ export class AsyncOpenAIInstrumentation {
     try {
       // Execute the original method in span context
       const result = await this.contextManager.withSpanAsync(span, async () => {
-        return await originalMethod.apply(this, args);
+        return await originalMethod.apply(instance, args);
       });
 
       const endTime = Date.now();
@@ -315,6 +369,7 @@ export class AsyncOpenAIInstrumentation {
     try {
       // Create reference to class methods for use in async iterator
       const extractChunkContent = this.extractChunkContent.bind(this);
+      const maxChunksInMemory = this.MAX_CHUNKS_IN_MEMORY;
 
       // Create instrumented async iterable
       const instrumentedIterable = {
@@ -356,6 +411,11 @@ export class AsyncOpenAIInstrumentation {
                 chunkData.tokens = chunkMetadata.tokens.output;
 
               context.chunks.push(chunkData);
+
+              // Prevent memory leak by limiting chunks in memory
+              if (context.chunks.length > maxChunksInMemory) {
+                context.chunks.shift(); // Remove oldest chunk
+              }
 
               // Add chunk event to span
               const eventAttrs: any = {
@@ -614,7 +674,13 @@ export class AsyncOpenAIInstrumentation {
    * Clean up resources (should be called on shutdown)
    */
   cleanup(): void {
+    // Clear all pending timeouts
+    for (const timeout of this.operationTimeouts.values()) {
+      clearTimeout(timeout);
+    }
+
     this.streamingContexts.clear();
     this.asyncOperations.clear();
+    this.operationTimeouts.clear();
   }
 }

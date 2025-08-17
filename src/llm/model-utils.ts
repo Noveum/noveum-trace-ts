@@ -141,7 +141,7 @@ export function detect_llm_provider(model: string): LLMProvider | null {
     lowerModel.includes('together') ||
     lowerModel.includes('qwen') ||
     lowerModel.includes('deepseek') ||
-    lowerModel.includes('yi-')
+    lowerModel.startsWith('yi-')
   ) {
     return 'together';
   }

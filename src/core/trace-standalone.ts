@@ -312,25 +312,6 @@ export class StandaloneTrace implements ITrace {
   }
 
   /**
-   * Convert status enum to string values matching Python SDK
-   */
-  private statusToString(status: SpanStatus): string {
-    switch (status) {
-      case SpanStatus.OK:
-        return 'ok';
-      case SpanStatus.ERROR:
-        return 'error';
-      case SpanStatus.TIMEOUT:
-        return 'timeout';
-      case SpanStatus.CANCELLED:
-        return 'cancelled';
-      case SpanStatus.UNSET:
-      default:
-        return 'unset';
-    }
-  }
-
-  /**
    * Serialize the trace for transport (Python SDK compatible format)
    * This method creates the serialization on-demand rather than storing it
    */
@@ -342,10 +323,10 @@ export class StandaloneTrace implements ITrace {
     const serializedSpans = this._spans.map(span => span.serialize());
 
     // Calculate error count from serialized spans
-    const errorCount = serializedSpans.filter(span => span.status === 'error').length;
+    const errorCount = serializedSpans.filter(span => span.status === SpanStatus.ERROR).length;
 
-    // Convert status enum to string
-    const status = this.statusToString(this._status);
+    // Status is already in Python SDK format (enum values are strings)
+    const status = this._status;
 
     return {
       trace_id: this._traceId,
@@ -365,7 +346,7 @@ export class StandaloneTrace implements ITrace {
       },
       spans: serializedSpans,
       sdk: {
-        name: 'noveum-trace-ts',
+        name: '@noveum/trace',
         version: getSdkVersion(),
       },
       project: this._client?.getConfig()?.project || 'default',

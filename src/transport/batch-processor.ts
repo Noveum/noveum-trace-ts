@@ -268,8 +268,8 @@ export class BatchProcessor {
       return;
     }
 
-    const tracesToFlush = this._pendingTraces.splice(0);
-    this._stats.queueSize = 0;
+    const tracesToFlush = this._pendingTraces.splice(0, this._config.batchSize);
+    this._stats.queueSize = this._pendingTraces.length;
 
     const batchId = this._generateBatchId();
     this._debugLog(`Flushing batch ${batchId} with ${tracesToFlush.length} traces`);

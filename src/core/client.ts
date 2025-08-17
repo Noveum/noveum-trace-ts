@@ -3,6 +3,7 @@
  */
 
 import type { NoveumClientOptions, TraceOptions, SpanOptions, TraceBatch } from './types.js';
+import { SpanStatus } from './types.js';
 import { StandaloneTrace as Trace } from './trace-standalone.js';
 import { StandaloneSpan as Span } from './span-standalone.js';
 import { HttpTransport } from '../transport/http-transport.js';
@@ -39,7 +40,7 @@ export class NoveumClient {
   // private readonly _contextManager: ContextManager;
   private readonly _sampler: Sampler;
   private readonly _pendingSpans: Span[] = [];
-  private readonly _pendingTraces: any[] = [];
+  private readonly _pendingTraces: Trace[] = [];
   private _flushTimer: NodeJS.Timeout | undefined;
   private _isShutdown = false;
 
@@ -361,6 +362,7 @@ export class NoveumClient {
       const errorCount = serializedSpans.filter(s => s.status === 'error').length;
 
       const rootSpan = spanGroup.find(s => (s as any).isRootSpan?.()) || spanGroup[0];
+      const rootSerialized = serializedSpans.find(s => !s.parent_span_id) ?? serializedSpans[0];
 
       // Compute overall start/end from Date objects with defensive defaults
       const startDate = spanGroup.reduce(
@@ -383,11 +385,11 @@ export class NoveumClient {
         start_time: formatPythonCompatibleTimestamp(startDate),
         end_time: formatPythonCompatibleTimestamp(endDate),
         duration_ms: durationMs,
-        status: hasError ? 'error' : 'ok',
+        status: hasError ? SpanStatus.ERROR : SpanStatus.OK,
         status_message: null,
         span_count: serializedSpans.length,
         error_count: errorCount,
-        attributes: (rootSpan as any)?.attributes || {},
+        attributes: rootSerialized?.attributes || {},
         metadata: {
           user_id: null,
           session_id: null,
@@ -397,12 +399,11 @@ export class NoveumClient {
         },
         spans: serializedSpans,
         sdk: {
-          name: 'noveum-trace-ts',
+          name: '@noveum/trace',
           version: getSdkVersion(),
         },
         project: this._config.project,
         environment: this._config.environment,
-        updated_at: formatPythonCompatibleTimestamp(new Date()),
       };
     });
 

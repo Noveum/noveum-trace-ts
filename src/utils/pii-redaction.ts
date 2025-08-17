@@ -108,11 +108,13 @@ const PII_PATTERNS = {
   phone:
     /(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})(?:\s?(?:ext|x|extension)[\s.]?(\d+))?|\+(?:[0-9]{1,3}[-.\s]?)?(?:\([0-9]{1,4}\)[-.\s]?)?[0-9]{1,4}[-.\s]?[0-9]{1,4}[-.\s]?[0-9]{1,9}/gi,
 
-  // Credit Card: 13-19 digits with optional spaces, dashes, or dots
-  creditCard: /\b(?:\d[ -]*?){13,19}\b/g,
+  // Credit Card: More specific patterns for major card types
+  // Visa (4xxx), MasterCard (5xxx), Amex (34xx/37xx), Discover (6xxx)
+  creditCard:
+    /\b(?:4\d{3}(?:[\s-]?\d{4}){3}|5[1-5]\d{2}(?:[\s-]?\d{4}){3}|3[47]\d{1}(?:[\s-]?\d{4}){2}(?:[\s-]?\d{3})|6(?:011|5\d{2})(?:[\s-]?\d{4}){3})\b/g,
 
-  // SSN: US Social Security Numbers with or without dashes
-  ssn: /\b(?:\d{3}[-.\s]?\d{2}[-.\s]?\d{4}|\d{9})\b/g,
+  // SSN: More restrictive pattern requiring proper formatting and excluding common non-SSN patterns
+  ssn: /\b(?:(?!000|666|9\d{2})[0-8]\d{2}[-.\s](?!00)\d{2}[-.\s](?!0000)\d{4})\b/g,
 
   // IPv4 addresses
   ipv4: /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g,
@@ -215,6 +217,16 @@ function validateIPv4(ip: string): boolean {
     const num = parseInt(part, 10);
     return num >= 0 && num <= 255 && part === String(num);
   });
+}
+
+/**
+ * Normalize a regex pattern to ensure it has the global flag for use with matchAll
+ */
+function normalizeRegexForMatchAll(pattern: RegExp): RegExp {
+  if (pattern.flags.includes('g')) {
+    return pattern;
+  }
+  return new RegExp(pattern.source, `${pattern.flags}g`);
 }
 
 /**
@@ -523,6 +535,65 @@ export function redactIPAddresses(
 }
 
 /**
+ * Redact URLs from text
+ */
+export function redactURLs(
+  text: string,
+  options: Partial<PIIRedactionOptions> = {}
+): PIIDetectionResult {
+  const opts = { ...DEFAULT_OPTIONS, ...options };
+  const detections: PIIDetection[] = [];
+  let redactedText = text;
+  let offset = 0;
+
+  const matches = Array.from(text.matchAll(PII_PATTERNS.url));
+
+  for (const match of matches) {
+    if (match.index === undefined || match.index === null) continue;
+
+    const originalValue = match[0];
+    const redactedValue = createRedactedText(originalValue, opts);
+
+    // Basic URL validation - must start with http/https and have a valid structure
+    const validated =
+      !opts.enableValidation ||
+      (originalValue.startsWith('http') &&
+        originalValue.includes('://') &&
+        originalValue.length > 10);
+
+    detections.push({
+      type: PIIType.URL,
+      originalValue,
+      redactedValue,
+      startIndex: match.index,
+      endIndex: match.index + originalValue.length,
+      confidence: validated ? 0.85 : 0.6,
+      validated,
+    });
+
+    if (validated) {
+      const adjustedIndex = match.index + offset;
+      redactedText =
+        redactedText.substring(0, adjustedIndex) +
+        redactedValue +
+        redactedText.substring(adjustedIndex + originalValue.length);
+      offset += redactedValue.length - originalValue.length;
+    }
+  }
+
+  return {
+    originalText: text,
+    redactedText,
+    detectedTypes: detections.length > 0 ? [PIIType.URL] : [],
+    detections,
+    redactionCount: { [PIIType.URL]: detections.filter(d => d.validated).length } as Record<
+      PIIType,
+      number
+    >,
+  };
+}
+
+/**
  * Merge multiple PII detection results
  */
 function mergeDetectionResults(results: PIIDetectionResult[]): PIIDetectionResult {
@@ -573,8 +644,16 @@ function mergeDetectionResults(results: PIIDetectionResult[]): PIIDetectionResul
     .filter(detection => detection.validated)
     .sort((a, b) => b.startIndex - a.startIndex);
 
+  // Track applied ranges in original coordinates to avoid overlapping replacements
+  const appliedRanges: Array<{ start: number; end: number }> = [];
+
   // Apply redactions from end to start to maintain indices
   for (const detection of sortedDetections) {
+    const overlaps = appliedRanges.some(
+      r => !(detection.endIndex <= r.start || detection.startIndex >= r.end)
+    );
+    if (overlaps) continue;
+
     redactedText =
       redactedText.substring(0, detection.startIndex) +
       detection.redactedValue +
@@ -582,6 +661,7 @@ function mergeDetectionResults(results: PIIDetectionResult[]): PIIDetectionResul
 
     allDetections.push(detection);
     redactionCount[detection.type] = (redactionCount[detection.type] || 0) + 1;
+    appliedRanges.push({ start: detection.startIndex, end: detection.endIndex });
   }
 
   const detectedTypes = [...new Set(allDetections.map(d => d.type))];
@@ -626,10 +706,15 @@ export function redactPII(
     results.push(redactIPAddresses(text, options));
   }
 
+  if (opts.enabledTypes.includes(PIIType.URL)) {
+    results.push(redactURLs(text, options));
+  }
+
   // Process custom patterns if provided
   if (opts.customPatterns && Object.keys(opts.customPatterns).length > 0) {
     for (const [, pattern] of Object.entries(opts.customPatterns)) {
-      const matches = Array.from(text.matchAll(pattern));
+      const globalPattern = normalizeRegexForMatchAll(pattern);
+      const matches = Array.from(text.matchAll(globalPattern));
       const detections: PIIDetection[] = [];
 
       for (const match of matches) {
@@ -746,11 +831,28 @@ export function detectPIITypes(
     }
   }
 
+  if (opts.enabledTypes.includes(PIIType.URL)) {
+    const urlMatches = Array.from(text.matchAll(PII_PATTERNS.url));
+    const validURLs = opts.enableValidation
+      ? urlMatches.filter(
+          match =>
+            match[0] &&
+            match[0].startsWith('http') &&
+            match[0].includes('://') &&
+            match[0].length > 10
+        )
+      : urlMatches;
+    if (validURLs.length > 0) {
+      detectionCount[PIIType.URL] = validURLs.length;
+    }
+  }
+
   // Check custom patterns
   if (opts.customPatterns && Object.keys(opts.customPatterns).length > 0) {
     let customCount = 0;
     for (const pattern of Object.values(opts.customPatterns)) {
-      const matches = Array.from(text.matchAll(pattern));
+      const globalPattern = normalizeRegexForMatchAll(pattern);
+      const matches = Array.from(text.matchAll(globalPattern));
       customCount += matches.length;
     }
     if (customCount > 0) {

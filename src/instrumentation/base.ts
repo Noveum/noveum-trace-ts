@@ -20,6 +20,15 @@ import type {
 import { DEFAULT_INSTRUMENTATION_CONFIG } from './types.js';
 
 /**
+ * Type guard to check if a span has the recordException method
+ */
+function hasRecordException(
+  span: ISpan
+): span is ISpan & { recordException: (error: Error) => void } {
+  return 'recordException' in span && typeof (span as any).recordException === 'function';
+}
+
+/**
  * Abstract base class for instrumentation modules
  */
 export abstract class BaseInstrumentation implements IInstrumentation {
@@ -251,9 +260,9 @@ export abstract class BaseInstrumentation implements IInstrumentation {
           const { SpanStatus } = await import('../core/types.js');
           span.setStatus(SpanStatus.ERROR, error.message);
 
-          // Record exception if the span implementation supports it
-          if ('recordException' in span && typeof (span as any).recordException === 'function') {
-            (span as any).recordException(error);
+          // Type guard for recordException
+          if (hasRecordException(span)) {
+            span.recordException(error);
           } else {
             // Fallback: add error as event
             span.addEvent('exception', {

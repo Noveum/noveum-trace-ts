@@ -295,6 +295,12 @@ export interface SerializedEvent {
 
 /**
  * API-compatible trace format (snake_case)
+ *
+ * This interface represents the external API format for traces that will be sent
+ * over HTTP to the Noveum backend. Key differences from SerializedTrace:
+ * - Uses optional fields (?) instead of nullable fields (| null) for better JSON compatibility
+ * - Uses string for status field instead of SpanStatus enum for API flexibility
+ * - Uses Record<string, any> for metadata.tags instead of Record<string, string>
  */
 export interface ApiTrace {
   trace_id: string;
@@ -325,6 +331,10 @@ export interface ApiTrace {
 
 /**
  * API-compatible span format (snake_case)
+ *
+ * This interface represents the external API format for spans. Key differences from SerializedSpan:
+ * - Uses optional fields (?) instead of nullable fields (| null) for better JSON compatibility
+ * - Uses string for status field instead of SpanStatus enum for API flexibility
  */
 export interface ApiSpan {
   span_id: string;
@@ -343,6 +353,9 @@ export interface ApiSpan {
 
 /**
  * API-compatible event format (snake_case)
+ *
+ * This interface represents the external API format for events.
+ * Uses Record<string, any> for attributes instead of optional Attributes type.
  */
 export interface ApiEvent {
   name: string;
@@ -352,6 +365,9 @@ export interface ApiEvent {
 
 /**
  * API-compatible link format (snake_case)
+ *
+ * This interface represents the external API format for links.
+ * Same structure as SerializedLink but with Record<string, any> for attributes.
  */
 export interface ApiLink {
   trace_id: string;
@@ -369,6 +385,10 @@ export interface ApiBatch {
 
 /**
  * Serialized link for transport (Python SDK compatible format)
+ *
+ * This interface represents the internal serialization format for span links,
+ * designed for compatibility with the Python SDK. Uses nullable fields and
+ * strict typing for internal consistency.
  */
 export interface SerializedLink {
   trace_id: string;
@@ -378,6 +398,12 @@ export interface SerializedLink {
 
 /**
  * Serialized span data for transport (Python SDK compatible format)
+ *
+ * This interface represents the internal serialization format for spans,
+ * designed for compatibility with the Python SDK. Key characteristics:
+ * - Uses nullable fields (| null) for precise null handling
+ * - Uses SpanStatus enum for type safety
+ * - Uses strict Attributes type for internal consistency
  */
 export interface SerializedSpan {
   span_id: string;
@@ -387,7 +413,7 @@ export interface SerializedSpan {
   start_time: string;
   end_time: string | null;
   duration_ms: number;
-  status: string; // "ok" | "error" | "unset" | "timeout" | "cancelled"
+  status: SpanStatus; // "ok" | "error" | "unset" | "timeout" | "cancelled"
   status_message: string | null;
   attributes: Attributes;
   events: SerializedEvent[];
@@ -396,6 +422,13 @@ export interface SerializedSpan {
 
 /**
  * Serialized trace data for transport (Python SDK compatible format)
+ *
+ * This interface represents the internal serialization format for traces,
+ * designed for compatibility with the Python SDK. Key characteristics:
+ * - Uses nullable fields (| null) for precise null handling
+ * - Uses SpanStatus enum for type safety
+ * - Uses Record<string, string> for tags (stricter than API format)
+ * - Used internally before conversion to ApiTrace for HTTP transport
  */
 export interface SerializedTrace {
   trace_id: string;
@@ -403,7 +436,7 @@ export interface SerializedTrace {
   start_time: string;
   end_time: string | null;
   duration_ms: number;
-  status: string; // "ok" | "error" | "unset" | "timeout" | "cancelled"
+  status: SpanStatus; // "ok" | "error" | "unset" | "timeout" | "cancelled"
   status_message: string | null;
   span_count: number;
   error_count: number;

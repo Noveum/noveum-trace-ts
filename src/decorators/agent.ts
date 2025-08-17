@@ -91,6 +91,8 @@ export interface TraceAgentOptions extends Omit<TraceOptions, 'attributes'> {
   trackMetrics?: boolean;
   /** Maximum length for captured strings */
   maxCaptureLength?: number;
+  /** Optional sanitizer for I/O payloads (PII redaction) */
+  sanitize?: (payload: unknown) => unknown;
 }
 
 /**
@@ -185,6 +187,7 @@ export function traceAgent(options: TraceAgentOptions = {}): any {
     trackMetrics = true,
     maxCaptureLength = 1000,
     attributes = {},
+    sanitize,
     ...traceOptions
   } = options;
 
@@ -230,7 +233,8 @@ export function traceAgent(options: TraceAgentOptions = {}): any {
         if (captureInputOutput && args.length > 0) {
           const currentSpan = getCurrentSpan();
           if (currentSpan) {
-            const inputData = args.length === 1 ? args[0] : args;
+            const rawInput = args.length === 1 ? args[0] : args;
+            const inputData = sanitize ? sanitize(rawInput) : rawInput;
             currentSpan.setAttribute('agent.input', safeSerialize(inputData, maxCaptureLength));
             currentSpan.setAttribute('agent.input_size', args.length);
           }
@@ -244,7 +248,8 @@ export function traceAgent(options: TraceAgentOptions = {}): any {
         if (currentSpan) {
           // Capture output if enabled
           if (captureInputOutput && result !== undefined) {
-            currentSpan.setAttribute('agent.output', safeSerialize(result, maxCaptureLength));
+            const outputData = sanitize ? sanitize(result) : result;
+            currentSpan.setAttribute('agent.output', safeSerialize(outputData, maxCaptureLength));
             currentSpan.setAttribute('agent.output_type', typeof result);
           }
 

@@ -4,6 +4,7 @@
  */
 
 import type { SerializedTrace, SerializedSpan, Attributes } from '../core/types.js';
+import { SpanStatus } from '../core/types.js';
 import { formatPythonCompatibleTimestamp, getSdkVersion } from './index.js';
 
 /**
@@ -138,7 +139,7 @@ export function migrateTrace(
     },
     spans,
     sdk: {
-      name: 'noveum-trace-ts',
+      name: '@noveum/trace',
       version: getSdkVersion(),
     },
     project: opts.defaultProject,
@@ -227,30 +228,30 @@ function convertTimestamp(timestamp: string | Date): string {
 /**
  * Normalize status strings to Python SDK format
  */
-function normalizeStatus(status?: string): string {
-  if (!status) return 'unset';
+function normalizeStatus(status?: string): SpanStatus {
+  if (!status) return SpanStatus.UNSET;
 
   const normalized = status.toLowerCase();
   switch (normalized) {
     case 'ok':
     case 'success':
     case 'completed':
-      return 'ok';
+      return SpanStatus.OK;
     case 'error':
     case 'failed':
     case 'failure':
-      return 'error';
+      return SpanStatus.ERROR;
     case 'timeout':
     case 'timed_out':
-      return 'timeout';
+      return SpanStatus.TIMEOUT;
     case 'cancelled':
     case 'canceled':
     case 'aborted':
-      return 'cancelled';
+      return SpanStatus.CANCELLED;
     case 'unset':
     case 'unknown':
     default:
-      return 'unset';
+      return SpanStatus.UNSET;
   }
 }
 

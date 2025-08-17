@@ -56,8 +56,8 @@ const PII_PATTERNS = {
     /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
   ],
 
-  // Social Security Numbers
-  ssn: [/\b\d{3}-\d{2}-\d{4}\b/g, /\b\d{3}\s\d{2}\s\d{4}\b/g, /\b\d{9}\b/g],
+  // Social Security Numbers (specific formats only to avoid false positives)
+  ssn: [/\b\d{3}-\d{2}-\d{4}\b/g, /\b\d{3}\s\d{2}\s\d{4}\b/g],
 
   // Addresses (simplified - can be complex)
   address: [

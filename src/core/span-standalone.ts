@@ -286,32 +286,13 @@ export class StandaloneSpan implements ISpan {
   }
 
   /**
-   * Convert status enum to string values matching Python SDK
-   */
-  private statusToString(status: SpanStatus): string {
-    switch (status) {
-      case SpanStatus.OK:
-        return 'ok';
-      case SpanStatus.ERROR:
-        return 'error';
-      case SpanStatus.TIMEOUT:
-        return 'timeout';
-      case SpanStatus.CANCELLED:
-        return 'cancelled';
-      case SpanStatus.UNSET:
-      default:
-        return 'unset';
-    }
-  }
-
-  /**
    * Serialize the span for transport (Python SDK compatible format)
    */
   serialize(): SerializedSpan {
     const duration = this._endTime ? this._endTime.getTime() - this._startTime.getTime() : 0;
 
-    // Convert status to Python SDK format
-    const status = this.statusToString(this._status);
+    // Status is already in Python SDK format (enum values are strings)
+    const status = this._status;
 
     return {
       span_id: this._spanId,

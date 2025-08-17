@@ -175,7 +175,11 @@ export class ContextManager implements IContextManager {
       spanStack: [...context.spanStack, span],
     });
 
-    return this._asyncLocalStorage.run(newContext, fn);
+    let result!: T;
+    (this._asyncLocalStorage as any).run(newContext, () => {
+      result = fn();
+    });
+    return result;
   }
 
   async withSpanAsync<T>(span: ISpan, fn: () => Promise<T>): Promise<T> {
@@ -185,7 +189,11 @@ export class ContextManager implements IContextManager {
       spanStack: [...context.spanStack, span],
     });
 
-    return this._asyncLocalStorage.run(newContext, fn);
+    return new Promise<T>((resolve, reject) => {
+      (this._asyncLocalStorage as any).run(newContext, () => {
+        Promise.resolve(fn()).then(resolve).catch(reject);
+      });
+    });
   }
 
   getActiveTrace(): ITrace | undefined {
@@ -205,7 +213,11 @@ export class ContextManager implements IContextManager {
       spanStack: [], // Reset span stack for new trace
     });
 
-    return this._asyncLocalStorage.run(newContext, fn);
+    let result!: T;
+    (this._asyncLocalStorage as any).run(newContext, () => {
+      result = fn();
+    });
+    return result;
   }
 
   async withTraceAsync<T>(trace: ITrace, fn: () => Promise<T>): Promise<T> {
@@ -215,7 +227,11 @@ export class ContextManager implements IContextManager {
       spanStack: [], // Reset span stack for new trace
     });
 
-    return this._asyncLocalStorage.run(newContext, fn);
+    return new Promise<T>((resolve, reject) => {
+      (this._asyncLocalStorage as any).run(newContext, () => {
+        Promise.resolve(fn()).then(resolve).catch(reject);
+      });
+    });
   }
 
   /**
@@ -545,22 +561,25 @@ export function* traceContext(
   span?: ISpan,
   attributes?: Attributes
 ): Generator<TraceContext, void, unknown> {
-  const contextManager = getGlobalContextManager();
-  const currentContext = contextManager.getCurrentContext();
-
-  // Create new context with provided values
-  const newContext = currentContext.copy({
-    activeTrace: trace ?? currentContext.activeTrace,
-    activeSpan: span ?? currentContext.activeSpan,
-    attributes: attributes
-      ? { ...currentContext.attributes, ...attributes }
-      : currentContext.attributes,
+  const cm = getGlobalContextManager();
+  const base = cm.getCurrentContext();
+  const newCtx = base.copy({
+    activeTrace: trace ?? base.activeTrace,
+    activeSpan: span ?? base.activeSpan,
+    attributes: attributes ? { ...base.attributes, ...attributes } : base.attributes,
   });
 
-  // Use AsyncLocalStorage to run with new context
-  yield* (function* () {
-    yield newContext;
-  })();
+  // Attach trace/span tokens for proper ALS propagation
+  const traceToken = trace ? cm.attachTrace(trace) : undefined;
+  const spanToken = span ? cm.attachSpan(span) : undefined;
+  if (attributes) cm.getCurrentContext().setAttributes(attributes);
+
+  try {
+    yield newCtx;
+  } finally {
+    spanToken && cm.detachSpan(spanToken);
+    traceToken && cm.detachTrace(traceToken);
+  }
 }
 
 /**

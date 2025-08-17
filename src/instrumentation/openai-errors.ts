@@ -6,6 +6,7 @@
  */
 
 import type { SDKVersionInfo } from './openai-compat.js';
+import { getSdkVersion } from '../utils/index.js';
 
 /**
  * Standardized error categories for OpenAI operations
@@ -415,7 +416,7 @@ export function gatherDiagnosticInfo(sdkVersion?: SDKVersionInfo, config?: any):
   // Build SDK info
   const sdk: DiagnosticInfo['sdk'] = {
     name: '@noveum/trace',
-    version: '1.0.2', // TODO: Get from package.json
+    version: getSdkVersion(),
   };
   if (sdkVersion) {
     sdk.compatibility_layer = {

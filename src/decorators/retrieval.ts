@@ -4,6 +4,7 @@
 
 import type { Attributes } from '../core/types.js';
 import { trace, TraceOptions } from './base.js';
+import { getCurrentSpan } from '../context/context-manager.js';
 
 /**
  * Retrieval operation types
@@ -300,7 +301,7 @@ export function traceRetrieval(options: TraceRetrievalOptions = {}): any {
       try {
         // Capture input query if enabled
         if (captureQuery && args.length > 0) {
-          const currentSpan = require('../context/context-manager.js').getCurrentSpan();
+          const currentSpan = getCurrentSpan();
           if (currentSpan) {
             const query = typeof args[0] === 'string' ? args[0] : JSON.stringify(args[0]);
             const truncatedQuery =
@@ -315,7 +316,7 @@ export function traceRetrieval(options: TraceRetrievalOptions = {}): any {
               const secondArg = args[1];
               if (typeof secondArg === 'number') {
                 currentSpan.setAttribute('retrieval.requested_count', secondArg);
-              } else if (typeof secondArg === 'object') {
+              } else if (secondArg && typeof secondArg === 'object') {
                 // Could be filters or options
                 currentSpan.setAttribute('retrieval.has_filters', true);
                 currentSpan.setAttribute('retrieval.filter_count', Object.keys(secondArg).length);
@@ -328,7 +329,7 @@ export function traceRetrieval(options: TraceRetrievalOptions = {}): any {
         const result = await Promise.resolve(original.apply(this, args));
 
         // Capture results and metadata
-        const currentSpan = require('../context/context-manager.js').getCurrentSpan();
+        const currentSpan = getCurrentSpan();
         if (currentSpan) {
           const totalTime = tracker.getTotalTime();
           currentSpan.setAttribute('retrieval.total_time_ms', totalTime);
@@ -423,7 +424,7 @@ export function traceRetrieval(options: TraceRetrievalOptions = {}): any {
         return result;
       } catch (error) {
         // Add error-specific retrieval attributes
-        const currentSpan = require('../context/context-manager.js').getCurrentSpan();
+        const currentSpan = getCurrentSpan();
         if (currentSpan) {
           currentSpan.setAttribute('retrieval.success', false);
           currentSpan.setAttribute('retrieval.error', true);

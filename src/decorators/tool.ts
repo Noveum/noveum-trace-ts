@@ -4,6 +4,20 @@
 
 import type { Attributes } from '../core/types.js';
 import { trace, TraceOptions } from './base.js';
+import { getCurrentSpan } from '../context/context-manager.js';
+
+/**
+ * Calculate content size in a cross-environment compatible way
+ */
+function getContentSize(content: string): number {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.byteLength(content, 'utf8');
+  } else if (typeof Blob !== 'undefined') {
+    return new Blob([content]).size;
+  } else {
+    return content.length;
+  }
+}
 
 /**
  * Tool operation types
@@ -277,7 +291,7 @@ function extractResponseMetadata(response: any): Partial<ToolMetadata> {
     if (response.data || response.body) {
       try {
         const content = JSON.stringify(response.data || response.body);
-        metadata.responseSize = new Blob([content]).size;
+        metadata.responseSize = getContentSize(content);
       } catch {
         // Fallback estimation
         metadata.responseSize = String(response.data || response.body || '').length;
@@ -374,7 +388,7 @@ export function traceTool(options: TraceToolOptions = {}): any {
       try {
         // Capture request data if enabled
         if (captureRequest && args.length > 0) {
-          const currentSpan = require('../context/context-manager.js').getCurrentSpan();
+          const currentSpan = getCurrentSpan();
           if (currentSpan) {
             // Capture input parameters
             const requestData = args.length === 1 ? args[0] : args;
@@ -389,7 +403,8 @@ export function traceTool(options: TraceToolOptions = {}): any {
 
             // Estimate request size
             try {
-              const requestSize = new Blob([JSON.stringify(args)]).size;
+              const content = JSON.stringify(args);
+              const requestSize = getContentSize(content);
               currentSpan.setAttribute('tool.request_size_bytes', requestSize);
             } catch {
               // Fallback
@@ -413,7 +428,7 @@ export function traceTool(options: TraceToolOptions = {}): any {
         }
 
         // Capture response and metadata
-        const currentSpan = require('../context/context-manager.js').getCurrentSpan();
+        const currentSpan = getCurrentSpan();
         if (currentSpan) {
           // Extract response metadata
           const responseMetadata = extractResponseMetadata(result);
@@ -507,7 +522,7 @@ export function traceTool(options: TraceToolOptions = {}): any {
         return result;
       } catch (error) {
         // Add error-specific tool attributes
-        const currentSpan = require('../context/context-manager.js').getCurrentSpan();
+        const currentSpan = getCurrentSpan();
         if (currentSpan) {
           currentSpan.setAttribute('tool.success', false);
           currentSpan.setAttribute('tool.error', true);

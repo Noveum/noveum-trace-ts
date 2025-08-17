@@ -9,7 +9,7 @@ describe('Span (from trace.ts)', () => {
   let span: Span;
 
   beforeEach(() => {
-    mockTrace = new Trace('test-trace');
+    mockTrace = new Trace('test-trace', {}, undefined, { project: 'test-project', environment: 'test' });
     span = new Span(mockTrace, 'test-span');
   });
 

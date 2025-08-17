@@ -58,7 +58,7 @@ export class HttpTransport implements ITransport {
     };
 
     // User-Agent matching Python SDK format
-    this._userAgent = `noveum-trace-ts/${getSdkVersion()}`;
+    this._userAgent = `@noveum/trace/${getSdkVersion()}`;
 
     this._debugLog('HttpTransport initialized', {
       endpoint: this._config.endpoint,
@@ -330,7 +330,7 @@ export class HttpTransport implements ITransport {
   }
 
   /**
-   * Normalize endpoint to ensure it uses /v1/traces
+   * Normalize endpoint to ensure it uses /v1/traces while preserving existing paths
    */
   private _normalizeEndpoint(endpoint: string): string {
     // Remove trailing slash
@@ -338,10 +338,8 @@ export class HttpTransport implements ITransport {
 
     // Ensure it ends with /v1/traces
     if (!normalized.endsWith('/v1/traces')) {
-      // Extract the base URL (protocol + host + port)
-      const url = new URL(normalized);
-      const baseUrl = `${url.protocol}//${url.host}`;
-      normalized = `${baseUrl}/v1/traces`;
+      // Preserve the existing path and append /v1/traces
+      normalized = `${normalized}/v1/traces`;
     }
 
     return normalized;

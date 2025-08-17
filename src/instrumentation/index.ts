@@ -42,7 +42,7 @@ export { AnthropicInstrumentation } from './anthropic.js';
 import { getGlobalInstrumentationRegistry } from './registry.js';
 import { OpenAIInstrumentation } from './openai.js';
 import { AnthropicInstrumentation } from './anthropic.js';
-import type { InstrumentationConfig } from './types.js';
+import type { InstrumentationConfig, IInstrumentation, InstrumentationTarget } from './types.js';
 
 /**
  * Automatically instrument an OpenAI SDK instance
@@ -64,7 +64,7 @@ import type { InstrumentationConfig } from './types.js';
  * });
  */
 export async function autoTraceOpenAI(
-  openaiClient: any,
+  openaiClient: unknown,
   config?: InstrumentationConfig
 ): Promise<void> {
   const registry = getGlobalInstrumentationRegistry();
@@ -106,7 +106,7 @@ export async function autoTraceOpenAI(
  * });
  */
 export async function autoTraceAnthropic(
-  anthropicClient: any,
+  anthropicClient: unknown,
   config?: InstrumentationConfig
 ): Promise<void> {
   const registry = getGlobalInstrumentationRegistry();
@@ -117,8 +117,15 @@ export async function autoTraceAnthropic(
     registry.register(anthropicInstrumentation);
   }
 
-  // Instrument the client
-  await registry.instrument(anthropicClient, 'anthropic', config);
+  try {
+    // Instrument the client
+    await registry.instrument(anthropicClient, 'anthropic', config);
+  } catch (error) {
+    // Handle instrumentation errors gracefully
+    console.warn(
+      `Failed to instrument Anthropic client: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
 }
 
 /**
@@ -256,7 +263,7 @@ export function isInstrumentationEnabled(): boolean {
  * Advanced: Register a custom instrumentation module
  * @param instrumentation - Custom instrumentation implementation
  */
-export function registerInstrumentation(instrumentation: any): void {
+export function registerInstrumentation(instrumentation: IInstrumentation): void {
   const registry = getGlobalInstrumentationRegistry();
   registry.register(instrumentation);
 }
@@ -265,7 +272,7 @@ export function registerInstrumentation(instrumentation: any): void {
  * Advanced: Unregister an instrumentation module
  * @param target - Target library type to unregister
  */
-export function unregisterInstrumentation(target: string): void {
+export function unregisterInstrumentation(target: InstrumentationTarget): void {
   const registry = getGlobalInstrumentationRegistry();
-  registry.unregister(target as any);
+  registry.unregister(target);
 }
