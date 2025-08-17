@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Span } from '../../src/core/span.js';
+import { formatPythonCompatibleTimestamp } from '../../src/utils/index.js';
 import { Trace } from '../../src/core/trace.js';
 import { SpanStatus, SpanKind, TraceLevel } from '../../src/core/types.js';
 import type { ITrace } from '../../src/core/interfaces.js';
@@ -249,7 +250,7 @@ describe('Span (from trace.ts)', () => {
         span_id: span.spanId,
         trace_id: span.traceId,
         name: 'test-span',
-        start_time: span.startTime.toISOString(),
+        start_time: formatPythonCompatibleTimestamp(span.startTime),
         end_time: null,
         status: SpanStatus.OK,
         status_message: null,
@@ -269,7 +270,7 @@ describe('Span (from trace.ts)', () => {
       await span.finish();
 
       const serialized = span.serialize();
-      expect(serialized.end_time).toBe(span.endTime!.toISOString());
+      expect(serialized.end_time).toBe(formatPythonCompatibleTimestamp(span.endTime!));
       expect(serialized.duration_ms).toBeGreaterThanOrEqual(0);
     });
   });

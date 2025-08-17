@@ -322,14 +322,22 @@ export class ContextManager implements IContextManager {
    * Run a function with a specific context
    */
   runWithContext<T>(context: TraceContext, fn: () => T): T {
-    return (this._asyncLocalStorage as any).run(context, fn);
+    let result!: T;
+    (this._asyncLocalStorage as any).run(context, () => {
+      result = fn();
+    });
+    return result;
   }
 
   /**
    * Run an async function with a specific context
    */
   async runWithContextAsync<T>(context: TraceContext, fn: () => Promise<T>): Promise<T> {
-    return (this._asyncLocalStorage as any).run(context, fn);
+    return new Promise<T>((resolve, reject) => {
+      (this._asyncLocalStorage as any).run(context, () => {
+        Promise.resolve(fn()).then(resolve).catch(reject);
+      });
+    });
   }
 
   /**

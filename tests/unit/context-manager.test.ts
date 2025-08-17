@@ -59,6 +59,10 @@ class MockSpan implements ISpan {
     this.status = status;
   }
 
+  public recordException(exception: Error | string): void {
+    // no-op for tests
+  }
+
   async finish(endTime?: Date): Promise<void> {
     this.endTime = endTime || new Date();
     this.isFinished = true;

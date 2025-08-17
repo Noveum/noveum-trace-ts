@@ -5,7 +5,12 @@
 import type { ISpan, ITrace } from './interfaces.js';
 import type { Attributes, SpanOptions, TraceEvent, SerializedSpan, SpanLink } from './types.js';
 import { SpanKind, SpanStatus } from './types.js';
-import { generateSpanId, sanitizeAttributes, extractErrorInfo } from '../utils/index.js';
+import {
+  generateSpanId,
+  sanitizeAttributes,
+  extractErrorInfo,
+  formatPythonCompatibleTimestamp,
+} from '../utils/index.js';
 
 /**
  * Implementation of a span - represents a single operation within a trace
@@ -197,8 +202,7 @@ export class Span implements ISpan {
   }
 
   serialize(): SerializedSpan {
-    const endTime = this._endTime || new Date();
-    const duration = endTime.getTime() - this._startTime.getTime();
+    const duration = this._endTime ? this._endTime.getTime() - this._startTime.getTime() : 0;
 
     // Convert status enum to Python-compatible string
     const status = ((): 'ok' | 'error' | 'unset' | 'timeout' | 'cancelled' => {
@@ -222,8 +226,8 @@ export class Span implements ISpan {
       span_id: this._spanId,
       parent_span_id: this._parentSpanId || null,
       name: this._name,
-      start_time: this._startTime.toISOString(),
-      end_time: this._endTime?.toISOString() || null,
+      start_time: formatPythonCompatibleTimestamp(this._startTime),
+      end_time: this._endTime ? formatPythonCompatibleTimestamp(this._endTime) : null,
       duration_ms: duration,
       status,
       status_message: this._statusMessage || null,

@@ -263,7 +263,7 @@ export class StandaloneTrace implements ITrace {
     const duration = this._endTime.getTime() - this._startTime.getTime();
     const wasFinished = this._isFinished;
     this._isFinished = false;
-    this.setAttribute('duration.ms', duration);
+    this.setAttribute('duration_ms', duration);
     this._isFinished = wasFinished;
 
     // If client is available and enabled, add this trace to pending queue

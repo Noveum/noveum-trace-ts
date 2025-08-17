@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Trace } from '../../src/core/trace.js';
+import { formatPythonCompatibleTimestamp } from '../../src/utils/index.js';
 import { SpanStatus, TraceLevel } from '../../src/core/types.js';
 import type { ITransport } from '../../src/core/interfaces.js';
 
@@ -251,7 +252,7 @@ describe('Trace (from trace.ts)', () => {
       expect(serialized).toMatchObject({
         trace_id: trace.traceId,
         name: 'test-trace',
-        start_time: trace.startTime.toISOString(),
+        start_time: formatPythonCompatibleTimestamp(trace.startTime),
         end_time: null,
         status: 'ok',
         attributes: { 'test.key': 'test.value' },
@@ -268,7 +269,7 @@ describe('Trace (from trace.ts)', () => {
       await trace.finish();
 
       const serialized = trace.serialize();
-      expect(serialized.end_time).toBe(trace.endTime!.toISOString());
+      expect(serialized.end_time).toBe(formatPythonCompatibleTimestamp(trace.endTime!));
     });
 
     it('should use config values for project and environment', () => {

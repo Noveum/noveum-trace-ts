@@ -187,8 +187,8 @@ export class StandaloneSpan implements ISpan {
   /**
    * Record an exception on the span
    */
-  recordException(error: Error | unknown): void {
-    const errorInfo = extractErrorInfo(error);
+  recordException(exception: Error | string): void {
+    const errorInfo = extractErrorInfo(exception);
 
     this.setStatus(SpanStatus.ERROR, errorInfo.message);
     const eventAttributes: Attributes = {
@@ -238,7 +238,7 @@ export class StandaloneSpan implements ISpan {
     try {
       return await fn();
     } catch (error) {
-      this.recordException(error);
+      this.recordException(error instanceof Error ? error : String(error));
       throw error;
     } finally {
       await this.finish();

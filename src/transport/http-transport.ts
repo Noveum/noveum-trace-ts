@@ -158,7 +158,7 @@ export class HttpTransport implements ITransport {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${this._config.apiKey}`,
-            ...(typeof (globalThis as any).window === 'undefined'
+            ...(typeof process !== 'undefined' && (process as any)?.release?.name === 'node'
               ? { 'User-Agent': this._userAgent }
               : {}),
             ...this._config.headers,
@@ -226,7 +226,7 @@ export class HttpTransport implements ITransport {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${this._config.apiKey}`,
-      ...(typeof (globalThis as any).window === 'undefined'
+      ...(typeof process !== 'undefined' && (process as any)?.release?.name === 'node'
         ? { 'User-Agent': this._userAgent }
         : {}),
       ...this._config.headers,

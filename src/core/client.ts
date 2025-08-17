@@ -135,7 +135,19 @@ export class NoveumClient {
       return this._createNoOpSpan(name, traceId);
     }
 
-    const resolvedParentId = options.parent_span_id ?? activeParentSpan?.spanId;
+    // Determine parent span:
+    // - Prefer explicitly provided parent_span_id
+    // - Otherwise, only inherit the currently active span if it belongs to the same trace
+    //   and is not finished (to avoid accidental cross-test/context leakage)
+    let resolvedParentId = options.parent_span_id;
+    if (
+      resolvedParentId === undefined &&
+      activeParentSpan &&
+      activeParentSpan.traceId === traceId &&
+      !activeParentSpan.isFinished
+    ) {
+      resolvedParentId = activeParentSpan.spanId;
+    }
     const spanOptions: any = {
       ...options,
       trace_id: traceId,
@@ -371,8 +383,20 @@ export class NoveumClient {
       traceMap.get(tId)!.push(s);
     }
 
-    // Convert span groups to trace format
-    const traces = Array.from(traceMap.entries()).map(([traceId, spanGroup]) => {
+    // Convert span groups to trace format, excluding traces already queued as finished
+    const finishedTraceIds = new Set(this._pendingTraces.map(t => t.traceId));
+    const entries = Array.from(traceMap.entries()).filter(
+      ([traceId]) => !finishedTraceIds.has(traceId)
+    );
+    if (this._config.debug) {
+      const excluded = traceMap.size - entries.length;
+      if (excluded > 0) {
+        console.log(
+          `[Noveum] Skipping ${excluded} span-group(s) already enqueued as finished traces`
+        );
+      }
+    }
+    const traces = entries.map(([traceId, spanGroup]) => {
       const serializedSpans = spanGroup.map(s => s.serialize());
       const hasError = serializedSpans.some(s => s.status === 'error');
       const errorCount = serializedSpans.filter(s => s.status === 'error').length;

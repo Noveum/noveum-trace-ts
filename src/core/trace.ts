@@ -12,7 +12,11 @@ import type {
   TraceBatch,
 } from './types.js';
 import { TraceLevel, SpanStatus } from './types.js';
-import { generateTraceId, sanitizeAttributes } from '../utils/index.js';
+import {
+  generateTraceId,
+  sanitizeAttributes,
+  formatPythonCompatibleTimestamp,
+} from '../utils/index.js';
 import { Span } from './span.js';
 
 /**
@@ -210,8 +214,7 @@ export class Trace implements ITrace {
   }
 
   serialize(): SerializedTrace {
-    const endTime = this._endTime || new Date();
-    const duration = endTime.getTime() - this._startTime.getTime();
+    const duration = this._endTime ? this._endTime.getTime() - this._startTime.getTime() : 0;
 
     // Convert status enum to Python-compatible string
     const status = ((): 'ok' | 'error' | 'unset' | 'timeout' | 'cancelled' => {
@@ -233,8 +236,8 @@ export class Trace implements ITrace {
     return {
       trace_id: this._traceId,
       name: this._name,
-      start_time: this._startTime.toISOString(),
-      end_time: this._endTime?.toISOString() || null,
+      start_time: formatPythonCompatibleTimestamp(this._startTime),
+      end_time: this._endTime ? formatPythonCompatibleTimestamp(this._endTime) : null,
       duration_ms: duration,
       status,
       status_message: null,

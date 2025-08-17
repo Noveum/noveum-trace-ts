@@ -111,7 +111,7 @@ const PII_PATTERNS = {
   // Credit Card: More specific patterns for major card types
   // Visa (4xxx), MasterCard (5xxx), Amex (34xx/37xx), Discover (6xxx)
   creditCard:
-    /\b(?:4\d{3}(?:[\s-]?\d{4}){3}|5[1-5]\d{2}(?:[\s-]?\d{4}){3}|3[47]\d{1}(?:[\s-]?\d{4}){2}(?:[\s-]?\d{3})|6(?:011|5\d{2})(?:[\s-]?\d{4}){3})\b/g,
+    /\b(?:4\d{3}(?:[\s-]?\d{4}){2}(?:[\s-]?\d{1,4})?|5[1-5]\d{2}(?:[\s-]?\d{4}){3}|3[47]\d{2}(?:[\s-]?\d{6})(?:[\s-]?\d{5})|6(?:011|5\d{2})(?:[\s-]?\d{4}){3})\b/g,
 
   // SSN: More restrictive pattern requiring proper formatting and excluding common non-SSN patterns
   ssn: /\b(?:(?!000|666|9\d{2})[0-8]\d{2}[-.\s](?!00)\d{2}[-.\s](?!0000)\d{4})\b/g,

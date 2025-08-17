@@ -111,6 +111,13 @@ export class AgentRagIntegrationTestSuite {
         model: 'text-embedding-3-small',
         input_size: 256,
       });
+      // Generic LLM call marker for UI/analytics
+      embedSpan.addEvent('llm_call', {
+        provider: 'openai',
+        api: 'embeddings',
+        model: 'text-embedding-3-small',
+        'llm.tokens.input': 256,
+      });
       await sleep(30);
       embedSpan.addEvent('openai.response', { vector_dim: 1536 });
       await embedSpan.finish();
@@ -151,6 +158,14 @@ export class AgentRagIntegrationTestSuite {
         },
       });
       genSpan.addEvent('openai.request', { model: 'gpt-4o-mini', messages: 6 });
+      // Generic LLM call marker for UI/analytics
+      genSpan.addEvent('llm_call', {
+        provider: 'openai',
+        api: 'chat.completions',
+        model: 'gpt-4o-mini',
+        messages: 6,
+        'llm.tokens.input': 320,
+      });
       await sleep(40);
       genSpan.addEvent('openai.response', { 'llm.tokens.output': 96 });
       await genSpan.finish();
@@ -160,6 +175,8 @@ export class AgentRagIntegrationTestSuite {
         attributes: { 'tool.name': 'calculator', query: '2+2*5' },
       });
       await sleep(8);
+      // Generic tool call marker for UI/analytics
+      toolSpan.addEvent('tool_call', { name: 'calculator', query: '2+2*5' });
       toolSpan.addEvent('tool.result', { value: 12 });
       await toolSpan.finish();
 
