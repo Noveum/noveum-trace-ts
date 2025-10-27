@@ -120,7 +120,7 @@ jobs:
           echo "Package installation test passed ✅"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: build-artifacts-${{ github.sha }}
           path: |
@@ -398,7 +398,7 @@ jobs:
           echo "✅ All required README sections found"
 
       - name: Upload documentation
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: documentation-${{ github.sha }}
           path: docs/
